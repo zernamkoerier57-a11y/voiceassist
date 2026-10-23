@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoiceAssist</title>
+<style>
+:root{--bg:#0a0a0a;--panel:#0f0f10;--line:#2a2a2d;--text:#e9e9ec;--green:#1fe08f;--pink:#ff1a8c;--blue:#2b9bd8;--purple:#8a4fd6}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;padding:28px 20px}
+.logo{align-self:flex-start;font-weight:700;font-size:1.1rem;letter-spacing:-.01em}
+main{flex:1;width:100%;max-width:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px}
+.orb{position:relative;width:260px;height:260px}
+.ring{position:absolute;border-radius:50%;-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px));mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px))}
+.r1{inset:0;background:conic-gradient(from 0deg,var(--green),#0a0a0a 30%,var(--pink) 55%,#7a2a5a 70%,var(--green));animation:spin 7s linear infinite}
+.r2{inset:28px;background:conic-gradient(from 90deg,var(--blue),var(--purple) 40%,#1c1c24 65%,var(--green) 85%,var(--blue));animation:spin 5s linear infinite reverse}
+.orb.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@media (prefers-reduced-motion:reduce){.ring,.orb.live{animation:none}}
+.btn{display:inline-flex;align-items:center;gap:10px;font:inherit;font-weight:600;font-size:1.05rem;cursor:pointer;border-radius:8px;padding:14px 26px;border:1px solid transparent}
+.btn svg{width:20px;height:20px}
+.btn:disabled{opacity:.6;cursor:wait}
+.start{background:var(--green);color:#04170f}
+.end{background:transparent;color:#fff;border-color:#fff}
+.hidden{display:none!important}
+.chat{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:12px;align-items:flex-start}
+.row.user{justify-content:flex-end}
+.dot{flex:none;width:36px;height:36px;border-radius:50%;border:3px solid #8b8b90}
+.bubble{max-width:78%;padding:12px 16px;border:1px solid var(--line);border-radius:14px;line-height:1.45}
+.user .bubble{background:#1d1e22}
+.sys{align-self:center;color:#ff8a8a}
+</style>
+</head>
+<body>
+<div class="logo">VoiceAssist</div>
+<main>
+<div class="orb" id="orb"><div class="ring r1"></div><div class="ring r2"></div></div>
+<button class="btn start" id="start" type="button">Talk To Agent</button>
+<button class="btn end hidden" id="end" type="button">End Conversation</button>
+<div class="chat hidden" id="chat"></div>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
