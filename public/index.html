@@ -41,6 +41,13 @@ main{flex:1;width:100%;max-width:520px;display:flex;flex-direction:column;align-
 .bubble{max-width:78%;padding:12px 16px;border:1px solid var(--line);border-radius:14px;font-size:1rem;line-height:1.45}
 .user .bubble{background:#1d1e22}
 .sys{align-self:center;color:#ff8a8a;font-size:.95rem}
+.avatar{width:280px;height:280px;border-radius:24px;overflow:hidden;position:relative;background:#16171c;border:1px solid var(--line)}
+.avatar svg,.avatar video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.avatar video{transition:opacity .15s}
+#eyes{transform-box:fill-box;transform-origin:center;transition:transform .08s}
+.bob{animation:bob 3.2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){.bob{animation:none}}
 </style>
 </head>
 <body>
@@ -48,6 +55,7 @@ main{flex:1;width:100%;max-width:520px;display:flex;flex-direction:column;align-
 
 <main>
   <div class="orb" id="orb" aria-hidden="true"><div class="ring r1"></div><div class="ring r2"></div></div>
+  <div class="avatar hidden" id="avatar"></div>
 
   <button class="btn start" id="start" type="button">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
@@ -93,6 +101,51 @@ function addError(text){
   var p=document.createElement('div');p.className='sys';p.textContent=text;chat.appendChild(p);chat.scrollTop=chat.scrollHeight;
 }
 
+var an=null,avRaf=0,avMode='off',smooth=0,blinkT=null;
+function $id(i){return document.getElementById(i);}
+function faceSVG(g){
+  var f=g==='male',skin=f?'#d9a47e':'#ecbf9c',hair=f?'#241b16':'#4a2c1a',shirt=f?'#3a4a6b':'#7a3f5e';
+  return '<svg viewBox="0 0 200 240" role="img" aria-label="Agent"><rect width="200" height="240" fill="#16171c"/>'+
+  (f?'':'<path d="M48 120 C40 60 70 28 100 28 C130 28 160 60 152 120 L156 215 L44 215 Z" fill="'+hair+'"/>')+
+  '<path d="M20 240 C24 205 60 192 100 192 C140 192 176 205 180 240Z" fill="'+shirt+'"/>'+
+  '<rect x="86" y="160" width="28" height="40" rx="10" fill="'+skin+'"/>'+
+  '<g class="bob"><ellipse cx="100" cy="112" rx="46" ry="56" fill="'+skin+'"/>'+
+  (f?'<path d="M54 108 C52 62 78 48 100 48 C124 48 148 62 146 108 C130 84 112 74 96 70 C80 76 64 88 54 108Z" fill="'+hair+'"/>':'<path d="M54 100 C50 52 78 42 100 42 C124 42 150 52 146 100 C140 80 126 68 100 66 C76 68 60 80 54 100Z" fill="'+hair+'"/>')+
+  '<g id="eyes"><ellipse cx="82" cy="108" rx="7" ry="5" fill="#fff"/><ellipse cx="118" cy="108" rx="7" ry="5" fill="#fff"/><circle cx="82" cy="108" r="3" fill="#2b1d14"/><circle cx="118" cy="108" r="3" fill="#2b1d14"/></g>'+
+  '<path d="M72 96 Q82 91 92 96M108 96 Q118 91 128 96" stroke="'+hair+'" stroke-width="3" fill="none" stroke-linecap="round"/>'+
+  '<path d="M100 112 L96 134 Q100 137 104 134" stroke="rgba(0,0,0,.25)" stroke-width="2" fill="none"/>'+
+  '<ellipse id="mth" cx="100" cy="152" rx="14" ry="2" fill="#5a1d24" stroke="'+(f?'#b5676d':'#c9565f')+'" stroke-width="2"/></g></svg>';
+}
+function showFace(g){
+  avMode='face';$id('avatar').innerHTML=faceSVG(g);
+  clearInterval(blinkT);
+  blinkT=setInterval(function(){var e=$id('eyes');if(!e)return;e.style.transform='scaleY(.1)';setTimeout(function(){e.style.transform='';},120);},3800);
+}
+function setupAvatar(c){
+  var mode=c.avatar_mode||'off',g=c.avatar_gender==='male'?'male':'female';
+  an=playCtx.createAnalyser();an.fftSize=512;an.connect(playCtx.destination);
+  if(mode==='off') return;
+  $id('orb').classList.add('hidden');$id('avatar').classList.remove('hidden');
+  if(mode==='video'){
+    avMode='video';
+    var h='';['idle','talk'].forEach(function(n){h+='<video id="v'+n+'" src="/avatars/'+g+'-'+n+'.mp4" muted loop playsinline autoplay style="opacity:'+(n==='idle'?1:0)+'"></video>';});
+    $id('avatar').innerHTML=h;
+    ['vidle','vtalk'].forEach(function(id){var v=$id(id);v.onerror=function(){if(avMode==='video')showFace(g);};v.play().catch(function(){});});
+  } else { showFace(g); }
+  cancelAnimationFrame(avRaf);avLoop();
+}
+function avLoop(){
+  var lv=0;
+  if(an&&sources.length){var a=new Uint8Array(an.fftSize);an.getByteTimeDomainData(a);var sum=0;for(var i=0;i<a.length;i++){var v=(a[i]-128)/128;sum+=v*v;}lv=Math.min(1,Math.sqrt(sum/a.length)*5);}
+  smooth=smooth*.6+lv*.4;
+  if(avMode==='face'){var m=$id('mth');if(m){m.setAttribute('ry',(2+smooth*13).toFixed(1));m.setAttribute('rx',(14-smooth*3).toFixed(1));}}
+  else if(avMode==='video'){var vt=$id('vtalk'),vi=$id('vidle');if(vt&&vi){var sp=smooth>0.04;vt.style.opacity=sp?1:0;vi.style.opacity=sp?0:1;}}
+  avRaf=requestAnimationFrame(avLoop);
+}
+function teardownAvatar(){
+  cancelAnimationFrame(avRaf);clearInterval(blinkT);an=null;smooth=0;avMode='off';
+  $id('avatar').innerHTML='';$id('avatar').classList.add('hidden');$id('orb').classList.remove('hidden');
+}
 function runCmd(c){
   if(!ws||ws.readyState!==1) return;
   if(c.type==='say'){ stopPlayback(); ws.send(JSON.stringify({type:'InjectAgentMessage',message:c.text})); }
@@ -108,7 +161,7 @@ function playPcm(arrayBuf){
   var buf=playCtx.createBuffer(1,f32.length,24000);
   buf.copyToChannel(f32,0);
   var src=playCtx.createBufferSource();
-  src.buffer=buf;src.connect(playCtx.destination);
+  src.buffer=buf;src.connect(an||playCtx.destination);
   var t=Math.max(playCtx.currentTime,nextTime);
   src.start(t);nextTime=t+buf.duration;
   sources.push(src);
@@ -137,6 +190,7 @@ function cleanup(){
   active=false;
   clearInterval(keepAlive);
   clearInterval(pingT);
+  teardownAvatar();
   if(SID){ api('end',{sid:SID}); SID=''; }
   stopPlayback();
   if(ws){try{ws.close();}catch(e){} ws=null;}
@@ -159,6 +213,7 @@ async function start(){
 
     playCtx=new AudioContext({sampleRate:24000});
     await playCtx.resume();
+    setupAvatar(d.cfg);
     active=true;
     pingT=setInterval(function(){api('ping',{k:K,sid:SID}).then(function(r){if(!active)return;if(!r.ok){addError('Session ended.');cleanup();resetUI();return;}(r.cmds||[]).forEach(runCmd);});},1500);
 
