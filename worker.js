@@ -1,11 +1,27 @@
 import { DurableObject } from "cloudflare:workers";
 
 const D = {
-  enabled: "1",
-  greeting: "Hello! How may I help you?",
-  voice: "aura-2-thalia-en",
-  prompt: "You are a friendly billing and support voice assistant. Help users understand their invoices and answer billing questions. Keep replies to one or two short sentences, spoken naturally, no markdown. If unsure, ask a short clarifying question.",
+  enabled: "1", greeting: "Hello! How may I help you?", voice: "aura-2-thalia-en",
+  model: "anthropic|claude-haiku-4-5", temp: "0.7", agent_name: "Ava", company: "VoiceAssist",
+  role: "a friendly billing and support assistant who helps with invoice questions and subscription requests",
+  tone: "warm and professional", length: "short", knowledge: "",
+  rules: "If asked for legal, medical or financial advice, politely say you cannot help with that.", prompt: "",
 };
+const LEN = {
+  short: "Keep replies to one or two short sentences.",
+  medium: "Keep replies to two to four sentences.",
+  detailed: "Give thorough answers when needed, but stay clear and easy to follow when spoken.",
+};
+function compose(s) {
+  return [
+    "#Role\nYou are " + s.agent_name + ", " + s.role + (s.company ? " for " + s.company : "") + ".",
+    "#Tone\nBe " + s.tone + ". " + (LEN[s.length] || LEN.short),
+    "#Voice\nYour replies are spoken aloud. Use plain spoken language. Never use markdown, symbols or bullet lists.",
+    s.knowledge && "#Knowledge\n" + s.knowledge,
+    s.rules && "#Rules\n" + s.rules,
+    s.prompt && "#Extra instructions\n" + s.prompt,
+  ].filter(Boolean).join("\n\n");
+}
 
 export class Hub extends DurableObject {
   constructor(s, e) {
@@ -14,6 +30,8 @@ export class Hub extends DurableObject {
     this.q("CREATE TABLE IF NOT EXISTS links(id TEXT PRIMARY KEY,name TEXT,active INT,created INT,expires INT,max_sec INT,max_sessions INT,used INT DEFAULT 0)");
     this.q("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,link_id TEXT,started INT,last_seen INT,ended INT,killed INT)");
     this.q("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,sid TEXT,role TEXT,content TEXT,ts INT)");
+    this.q("CREATE TABLE IF NOT EXISTS cmds(id INTEGER PRIMARY KEY AUTOINCREMENT,sid TEXT,type TEXT,text TEXT)");
+    try { this.q("ALTER TABLE sessions ADD COLUMN archived INT DEFAULT 0"); } catch (e) {}
     this.q("CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY,v TEXT)");
   }
   settings() { const o = { ...D }; for (const r of this.q("SELECT k,v FROM settings")) o[r.k] = r.v; return o; }
@@ -40,19 +58,32 @@ export class Hub extends DurableObject {
   }
   ping(k, sid) {
     const s = this.q("SELECT * FROM sessions WHERE id=?", sid)[0], l = this.q("SELECT * FROM links WHERE id=?", k)[0], n = Date.now();
-    if (!s || s.link_id !== k || s.ended || s.killed || !this.ok(l) || this.settings().enabled !== "1" || (l.max_sec && n - s.started > l.max_sec * 1000)) return false;
+    if (!s || s.link_id !== k || s.ended || s.killed || !this.ok(l) || this.settings().enabled !== "1" || (l.max_sec && n - s.started > l.max_sec * 1000)) return { ok: false };
     this.q("UPDATE sessions SET last_seen=? WHERE id=?", n, sid);
-    return true;
+    const cmds = this.q("SELECT type,text FROM cmds WHERE sid=? ORDER BY id", sid);
+    if (cmds.length) this.q("DELETE FROM cmds WHERE sid=?", sid);
+    return { ok: true, cmds };
   }
   log(k, sid, role, c) {
     const s = this.q("SELECT * FROM sessions WHERE id=?", sid)[0];
     if (!s || s.link_id !== k || s.ended) return;
-    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, role === "user" ? "user" : "assistant", String(c).slice(0, 2000), Date.now());
+    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, role === "user" ? "user" : role === "sys" ? "sys" : "assistant", String(c).slice(0, 2000), Date.now());
   }
   end(sid) { this.q("UPDATE sessions SET ended=? WHERE id=? AND ended=0", Date.now(), sid); }
   kill(sid) { this.q("UPDATE sessions SET killed=1,ended=? WHERE id=? AND ended=0", Date.now(), sid); }
   killAll() { this.q("UPDATE sessions SET killed=1,ended=? WHERE ended=0", Date.now()); }
-  sessions() { return this.q("SELECT s.id,s.started,s.ended,COALESCE(l.name,'(deleted)') name,(s.ended=0 AND s.last_seen>?) live FROM sessions s LEFT JOIN links l ON l.id=s.link_id ORDER BY s.started DESC LIMIT 60", Date.now() - 12000); }
+  sessions(a) { return this.q("SELECT s.id,s.started,s.ended,COALESCE(l.name,'(deleted)') name,(s.ended=0 AND s.last_seen>?) live FROM sessions s LEFT JOIN links l ON l.id=s.link_id WHERE COALESCE(s.archived,0)=? ORDER BY s.started DESC LIMIT 100", Date.now() - 12000, a ? 1 : 0); }
+  archive(sid, f) { this.q("UPDATE sessions SET archived=? WHERE id=? AND ended>0", f ? 1 : 0, sid); }
+  delSession(sid) { const s = this.q("SELECT ended FROM sessions WHERE id=?", sid)[0]; if (!s || !s.ended) return; this.q("DELETE FROM messages WHERE sid=?", sid); this.q("DELETE FROM sessions WHERE id=?", sid); }
+  clearEnded(mode, arch) { for (const r of this.q("SELECT id FROM sessions WHERE ended>0 AND COALESCE(archived,0)=?", arch ? 1 : 0)) { if (mode === "delete") this.delSession(r.id); else this.archive(r.id, true); } }
+  cmd(sid, type, text) {
+    const s = this.q("SELECT ended FROM sessions WHERE id=?", sid)[0];
+    if (!s || s.ended) return false;
+    text = String(text).slice(0, 1000);
+    this.q("INSERT INTO cmds(sid,type,text) VALUES(?,?,?)", sid, type, text);
+    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, "admin", (type === "say" ? "Admin made the agent say: " : "Admin instruction: ") + text, Date.now());
+    return true;
+  }
   msgs(sid, after) { return this.q("SELECT id,role,content,ts FROM messages WHERE sid=? AND id>? ORDER BY id", sid, after); }
 }
 
@@ -81,9 +112,9 @@ export default {
       });
       if (!g.ok) { await hub.end(r.sid); return j({ error: "Service unavailable." }, 502); }
       const t = (await g.json()).access_token;
-      return j({ token: t, sid: r.sid, cfg: { greeting: r.st.greeting, voice: r.st.voice, prompt: r.st.prompt } });
+      return j({ token: t, sid: r.sid, cfg: { greeting: r.st.greeting, voice: r.st.voice, model: r.st.model, temp: r.st.temp, prompt: compose(r.st) } });
     }
-    if (p === "/api/ping") return j({ ok: await hub.ping(String(b.k), String(b.sid)) });
+    if (p === "/api/ping") return j(await hub.ping(String(b.k), String(b.sid)));
     if (p === "/api/log") { await hub.log(String(b.k), String(b.sid), b.role, b.content || ""); return j({ ok: true }); }
     if (p === "/api/end") { await hub.end(String(b.sid)); return j({ ok: true }); }
 
@@ -91,13 +122,17 @@ export default {
       const pw = req.headers.get("x-admin") || "";
       if (!env.ADMIN_PASSWORD || !same(pw, env.ADMIN_PASSWORD)) return j({ error: "no" }, 401);
       const a = p.slice(11);
-      if (a === "state") return j({ links: await hub.links(), sessions: await hub.sessions(), settings: await hub.settings() });
+      if (a === "state") return j({ links: await hub.links(), sessions: await hub.sessions(u.searchParams.get("arch") === "1"), settings: await hub.settings() });
       if (a === "msgs") return j(await hub.msgs(u.searchParams.get("sid") || "", +u.searchParams.get("after") || 0));
       if (a === "create") return j({ id: await hub.create(b.name, +b.hours || 0, +b.min || 0, +b.max || 0) });
       if (a === "toggle") { await hub.toggle(b.id, b.active); return j({ ok: true }); }
       if (a === "delete") { await hub.remove(b.id); return j({ ok: true }); }
       if (a === "kill") { await hub.kill(b.sid); return j({ ok: true }); }
       if (a === "killall") { await hub.killAll(); return j({ ok: true }); }
+      if (a === "archive") { await hub.archive(b.sid, b.flag); return j({ ok: true }); }
+      if (a === "sdelete") { await hub.delSession(b.sid); return j({ ok: true }); }
+      if (a === "clear") { await hub.clearEnded(b.mode, b.arch); return j({ ok: true }); }
+      if (a === "cmd") return j({ ok: await hub.cmd(b.sid, b.type === "say" ? "say" : "instruct", b.text || "") });
       if (a === "settings") { await hub.save(b); return j({ ok: true }); }
     }
     return j({ error: "not found" }, 404);
