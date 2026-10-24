@@ -70,10 +70,12 @@ var K=new URLSearchParams(location.search).get('k')||'',SID='',pingT=null,SETTIN
 function api(p,b){return fetch('/api/'+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();});}
 function buildSettings(c){
   var fx=c.voice.indexOf('flux')===0;
+  var pm=(c.model||'anthropic|claude-haiku-4-5').split('|'),tp={type:pm[0],model:pm[1]},t=parseFloat(c.temp);
+  if(!isNaN(t)) tp.temperature=Math.max(0,Math.min(1,t));
   return {type:"Settings",audio:{input:{encoding:"linear16",sample_rate:48000},output:{encoding:"linear16",sample_rate:24000,container:"none"}},
     agent:{speak:{provider:fx?{type:"deepgram",version:"v2",model:c.voice}:{type:"deepgram",model:c.voice}},
       listen:{provider:{type:"deepgram",version:"v2",model:"flux-general-en"}},
-      think:{provider:{type:"anthropic",model:"claude-haiku-4-5"},prompt:c.prompt},greeting:c.greeting}};
+      think:{provider:tp,prompt:c.prompt},greeting:c.greeting}};
 }
 
 var ws=null, micCtx=null, micStream=null, playCtx=null, nextTime=0, sources=[], keepAlive=null, active=false;
@@ -91,6 +93,11 @@ function addError(text){
   var p=document.createElement('div');p.className='sys';p.textContent=text;chat.appendChild(p);chat.scrollTop=chat.scrollHeight;
 }
 
+function runCmd(c){
+  if(!ws||ws.readyState!==1) return;
+  if(c.type==='say'){ stopPlayback(); ws.send(JSON.stringify({type:'InjectAgentMessage',message:c.text})); }
+  else { ws.send(JSON.stringify({type:'UpdatePrompt',prompt:c.text})); }
+}
 function playPcm(arrayBuf){
   if(!playCtx) return;
   var len=arrayBuf.byteLength-(arrayBuf.byteLength%2);
@@ -115,9 +122,9 @@ function stopPlayback(){
 async function startMic(){
   micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});
   micCtx=new AudioContext({sampleRate:48000});
-  var code="class P extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(960);this.n=0;}"+ 
+  var code="class P extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(960);this.n=0;}"+
     "process(inputs){var c=inputs[0][0];if(c){for(var i=0;i<c.length;i++){this.b[this.n++]=c[i];"+
-    "if(this.n===960){var o=new Int16Array(960);for(var j=0;j<960;j++){var s=Math.max(-1,Math.min(1,this.b[j]));o[j]=s<0?s*32768:s*32767;}"+ 
+    "if(this.n===960){var o=new Int16Array(960);for(var j=0;j<960;j++){var s=Math.max(-1,Math.min(1,this.b[j]));o[j]=s<0?s*32768:s*32767;}"+
     "this.port.postMessage(o.buffer,[o.buffer]);this.n=0;}}}return true;}}registerProcessor('pcm',P);";
   var url=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
   await micCtx.audioWorklet.addModule(url);
@@ -153,7 +160,7 @@ async function start(){
     playCtx=new AudioContext({sampleRate:24000});
     await playCtx.resume();
     active=true;
-    pingT=setInterval(function(){api('ping',{k:K,sid:SID}).then(function(r){if(active&&!r.ok){addError('Session ended.');cleanup();resetUI();}});},4000);
+    pingT=setInterval(function(){api('ping',{k:K,sid:SID}).then(function(r){if(!active)return;if(!r.ok){addError('Session ended.');cleanup();resetUI();return;}(r.cmds||[]).forEach(runCmd);});},1500);
 
     ws=new WebSocket('wss://agent.deepgram.com/v1/agent/converse',['bearer',token]);
     ws.binaryType='arraybuffer';
@@ -168,6 +175,7 @@ async function start(){
       }
       else if(m.type==='ConversationText'){ if(m.content){ addMessage(m.role==='user'?'user':'assistant',m.content); api('log',{k:K,sid:SID,role:m.role,content:m.content}); } }
       else if(m.type==='UserStartedSpeaking'){ stopPlayback(); }
+      else if(m.type==='InjectionRefused'){ api('log',{k:K,sid:SID,role:'sys',content:'Message refused: the agent was speaking. Try again in a moment.'}); }
       else if(m.type==='Error'){ addError('Something went wrong. Please try again.'); }
     };
     ws.onclose=function(){ if(active){ addError('Connection closed.'); cleanup(); resetUI(); } };
