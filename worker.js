@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 const D = {
+  avatar_mode: "off", avatar_gender: "female",
   enabled: "1", greeting: "Hello! How may I help you?", voice: "aura-2-thalia-en",
   model: "anthropic|claude-haiku-4-5", temp: "0.7", agent_name: "Ava", company: "VoiceAssist",
   role: "a friendly billing and support assistant who helps with invoice questions and subscription requests",
@@ -112,7 +113,7 @@ export default {
       });
       if (!g.ok) { await hub.end(r.sid); return j({ error: "Service unavailable." }, 502); }
       const t = (await g.json()).access_token;
-      return j({ token: t, sid: r.sid, cfg: { greeting: r.st.greeting, voice: r.st.voice, model: r.st.model, temp: r.st.temp, prompt: compose(r.st) } });
+      return j({ token: t, sid: r.sid, cfg: { greeting: r.st.greeting, voice: r.st.voice, avatar_mode: r.st.avatar_mode, avatar_gender: r.st.avatar_gender, model: r.st.model, temp: r.st.temp, prompt: compose(r.st) } });
     }
     if (p === "/api/ping") return j(await hub.ping(String(b.k), String(b.sid)));
     if (p === "/api/log") { await hub.log(String(b.k), String(b.sid), b.role, b.content || ""); return j({ ok: true }); }
