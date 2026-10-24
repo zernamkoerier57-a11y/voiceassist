@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Admin</title>
+<style>
+:root{--bg:#0a0a0a;--p:#111113;--l:#2a2a2d;--t:#e9e9ec;--m:#9a9aa0;--g:#1fe08f;--r:#ff5a6e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:15px/1.45 Inter,system-ui,sans-serif;padding:20px}
+h2{font-size:1rem;margin:0 0 12px}.card{background:var(--p);border:1px solid var(--l);border-radius:12px;padding:16px;margin-bottom:16px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}.bar b{font-size:1.1rem;margin-right:auto}
+input,select,textarea{background:#0a0a0a;color:var(--t);border:1px solid var(--l);border-radius:8px;padding:9px 11px;font:inherit}
+textarea{width:100%;min-height:110px}label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--m)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+button{background:#1d1e22;color:var(--t);border:1px solid var(--l);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+button:hover{background:#26272c}.pri{background:var(--g);color:#04170f;border-color:var(--g);font-weight:600}.bad{color:var(--r)}
+.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:640px}td,th{text-align:left;padding:9px 8px;border-top:1px solid var(--l);font-size:.9rem}th{color:var(--m);font-weight:500;border:0}
+.lv{color:var(--g);font-weight:600}.mut{color:var(--m)}
+#drawer{position:fixed;top:0;right:0;width:min(420px,100%);height:100%;background:var(--p);border-left:1px solid var(--l);padding:16px;display:none;flex-direction:column;gap:10px}
+#tr{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.m{padding:9px 12px;border-radius:12px;max-width:85%;border:1px solid var(--l)}.m.user{align-self:flex-end;background:#1d1e22}
+#login{max-width:320px;margin:15vh auto;display:flex;flex-direction:column;gap:10px}
+</style></head><body>
+<div id="login"><h2>Admin login</h2><input id="pw" type="password" placeholder="Password"><button class="pri" id="go">Login</button><div id="err" class="bad"></div></div>
+
+<div id="app" hidden>
+ <div class="bar"><b>VoiceAssist Admin</b><span id="cnt" class="lv"></span>
+  <button id="master"></button><button id="killall" class="bad">End all sessions</button><button id="out">Logout</button></div>
+
+ <div class="card"><h2>Create access link</h2><div class="row">
+  <label>Name<input id="n" placeholder="e.g. Rahim"></label>
+  <label>Expires after (hours, 0 = never)<input id="h" type="number" min="0" value="24"></label>
+  <label>Max minutes per session (0 = no limit)<input id="mm" type="number" min="0" value="10"></label>
+  <label>Max sessions (0 = unlimited)<input id="ms" type="number" min="0" value="0"></label>
+  <button class="pri" id="mk">Create link</button></div></div>
+
+ <div class="card"><h2>Links</h2><div class="wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Sessions</th><th>Expires</th><th>Session limit</th><th></th></tr></thead><tbody id="lk"></tbody></table></div></div>
+
+ <div class="card"><h2>Live and recent conversations</h2><div class="wrap"><table><tbody id="ss"></tbody></table></div></div>
+
+ <div class="card"><h2>Agent settings</h2><div class="row">
+  <label>Voice<select id="vo"><option value="aura-2-thalia-en">Thalia (female)</option><option value="aura-2-luna-en">Luna (female)</option><option value="aura-2-asteria-en">Asteria (female)</option><option value="aura-2-orion-en">Orion (male)</option><option value="aura-2-apollo-en">Apollo (male)</option></select></label>
+  <label style="flex:1;min-width:240px">Greeting<input id="gr"></label></div>
+  <label style="margin-top:10px">Prompt<textarea id="pr"></textarea></label>
+  <p><button class="pri" id="sv">Save settings</button> <span id="ok" class="lv"></span></p></div>
+</div>
+
+<div id="drawer"><div class="row" style="justify-content:space-between"><b id="dt"></b><span><button id="de" class="bad">End</button> <button id="dc">Close</button></span></div><div id="tr"></div></div>
+
+<script>
+var $=function(i){return document.getElementById(i)},PW=sessionStorage.getItem('pw')||'',cur='',last=0,loaded=false,S=null,timer=null;
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&','<':'<','>':'>','"':'"'}[c]})}
+function call(p,b){var o={headers:{'x-admin':PW,'Content-Type':'application/json'}};if(b){o.method='POST';o.body=JSON.stringify(b)}
+ return fetch('/api/admin/'+p,o).then(function(r){if(r.status===401){logout();throw 0}return r.json()})}
+function logout(){PW='';sessionStorage.removeItem('pw');clearInterval(timer);$('app').hidden=true;$('login').hidden=false}
+function boot(){$('login').hidden=true;$('app').hidden=false;loaded=false;poll();clearInterval(timer);timer=setInterval(poll,2500)}
+$('go').onclick=function(){PW=$('pw').value;call('state').then(function(){sessionStorage.setItem('pw',PW);boot()}).catch(function(){$('err').textContent='Wrong password'})};
+$('pw').onkeydown=function(e){if(e.key==='Enter')$('go').click()};
+$('out').onclick=logout;
+if(PW)call('state').then(boot).catch(function(){});
+
+function poll(){call('state').then(function(d){S=d;render(d);if(cur)loadMsgs()}).catch(function(){})}
+function render(d){
+ var on=d.settings.enabled==='1',live=d.sessions.filter(function(s){return s.live}).length;
+ $('cnt').textContent=live?'● '+live+' live':'';
+ $('master').textContent=on?'Agent: ON (click to turn off)':'Agent: OFF (click to turn on)';
+ $('lk').innerHTML=d.links.map(function(l){var ex=l.expires&&l.expires<Date.now();
+  return '<tr><td>'+esc(l.name)+(l.live?' <span class=lv>● live</span>':'')+'</td><td>'+(!l.active?'Off':ex?'Expired':'On')+'</td><td>'+l.used+(l.max_sessions?' / '+l.max_sessions:'')+'</td><td>'+(l.expires?new Date(l.expires).toLocaleString():'Never')+'</td><td>'+(l.max_sec?l.max_sec/60+' min':'None')+
+  '</td><td><button data-a=copy data-id="'+l.id+'">Copy link</button> <button data-a=tog data-id="'+l.id+'" data-v="'+(l.active?0:1)+'">'+(l.active?'Turn off':'Turn on')+'</button> <button class=bad data-a=del data-id="'+l.id+'">Delete</button></td></tr>'}).join('')||'<tr><td class=mut>No links yet</td></tr>';
+ $('ss').innerHTML=d.sessions.map(function(s){
+  return '<tr><td>'+esc(s.name)+'</td><td class=mut>'+new Date(s.started).toLocaleString()+'</td><td>'+(s.live?'<span class=lv>● live</span>':'<span class=mut>ended</span>')+'</td><td><button data-a=view data-id="'+s.id+'" data-n="'+esc(s.name)+'">'+(s.live?'Listen':'View')+'</button> '+(s.live?'<button class=bad data-a=kill data-id="'+s.id+'">End</button>':'')+'</td></tr>'}).join('')||'<tr><td class=mut>No conversations yet</td></tr>';
+ if(!loaded){loaded=true;$('vo').value=d.settings.voice;$('gr').value=d.settings.greeting;$('pr').value=d.settings.prompt}
+}
+document.addEventListener('click',function(e){var b=e.target.closest('button[data-a]');if(!b)return;var a=b.dataset.a,id=b.dataset.id;
+ if(a==='copy'){var u=location.origin+'/?k='+id;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){b.textContent='Copied'}).catch(function(){prompt('Copy this link',u)})}
+ if(a==='tog')call('toggle',{id:id,active:b.dataset.v==='1'}).then(poll);
+ if(a==='del'&&confirm('Delete this link? Live sessions will end.'))call('delete',{id:id}).then(poll);
+ if(a==='kill')call('kill',{sid:id}).then(poll);
+ if(a==='view')openT(id,b.dataset.n)});
+$('mk').onclick=function(){call('create',{name:$('n').value,hours:$('h').value,min:$('mm').value,max:$('ms').value}).then(function(r){$('n').value='';poll();prompt('Link created. Copy it:',location.origin+'/?k='+r.id)})};
+$('master').onclick=function(){call('settings',{enabled:S.settings.enabled==='1'?'0':'1'}).then(poll)};
+$('killall').onclick=function(){if(confirm('End all live sessions?'))call('killall',{}).then(poll)};
+$('sv').onclick=function(){call('settings',{voice:$('vo').value,greeting:$('gr').value,prompt:$('pr').value}).then(function(){$('ok').textContent='Saved';setTimeout(function(){$('ok').textContent=''},2000)})};
+function openT(id,n){cur=id;last=0;$('tr').innerHTML='';$('dt').textContent=n;$('drawer').style.display='flex';loadMsgs()}
+function loadMsgs(){var id=cur;call('msgs?sid='+id+'&after='+last).then(function(a){if(id!==cur)return;a.forEach(function(m){last=m.id;var d=document.createElement('div');d.className='m '+m.role;d.textContent=m.content;$('tr').appendChild(d)});if(a.length)$('tr').scrollTop=1e9})}
+$('dc').onclick=function(){cur='';$('drawer').style.display='none'};
+$('de').onclick=function(){if(cur)call('kill',{sid:cur}).then(poll)};
+</script></body></html>
