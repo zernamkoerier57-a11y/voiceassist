@@ -52,7 +52,7 @@ export class Hub extends DurableObject {
     if (!this.ok(l)) return { r: "This link is not active." };
     if (l.max_sessions && l.used >= l.max_sessions) return { r: "This link has reached its limit." };
     const sid = crypto.randomUUID(), n = Date.now();
-    this.q("INSERT INTO sessions VALUES(?,?,?,?,0,0)", sid, k, n, n);
+    this.q("INSERT INTO sessions(id,link_id,started,last_seen,ended,killed) VALUES(?,?,?,?,0,0)", sid, k, n, n);
     this.q("UPDATE links SET used=used+1 WHERE id=?", k);
     return { sid, st };
   }
