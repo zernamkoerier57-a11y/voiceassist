@@ -17,6 +17,7 @@ button:hover{background:#26272c}.pri{background:var(--g);color:#04170f;border-co
 #tr{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .m{padding:9px 12px;border-radius:12px;max-width:85%;border:1px solid var(--l)}.m.user{align-self:flex-end;background:#1d1e22}
 #login{max-width:320px;margin:15vh auto;display:flex;flex-direction:column;gap:10px}
+.m.admin{border-color:var(--g)}.m.sys{color:var(--r);align-self:center;border:0}#ctl{display:none}
 </style></head><body>
 <div id="login"><h2>Admin login</h2><input id="pw" type="password" placeholder="Password"><button class="pri" id="go">Login</button><div id="err" class="bad"></div></div>
 
@@ -33,20 +34,31 @@ button:hover{background:#26272c}.pri{background:var(--g);color:#04170f;border-co
 
  <div class="card"><h2>Links</h2><div class="wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Sessions</th><th>Expires</th><th>Session limit</th><th></th></tr></thead><tbody id="lk"></tbody></table></div></div>
 
- <div class="card"><h2>Live and recent conversations</h2><div class="wrap"><table><tbody id="ss"></tbody></table></div></div>
+ <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Conversations</h2><span><button id="tabA">Active</button> <button id="tabR">Archived</button> <button id="bulkA">Archive all ended</button> <button id="bulkD" class="bad">Delete all ended</button></span></div><div class="wrap"><table><tbody id="ss"></tbody></table></div></div>
 
- <div class="card"><h2>Agent settings</h2><div class="row">
-  <label>Voice<select id="vo"><option value="aura-2-thalia-en">Thalia (female)</option><option value="aura-2-luna-en">Luna (female)</option><option value="aura-2-asteria-en">Asteria (female)</option><option value="aura-2-orion-en">Orion (male)</option><option value="aura-2-apollo-en">Apollo (male)</option></select></label>
-  <label style="flex:1;min-width:240px">Greeting<input id="gr"></label></div>
-  <label style="margin-top:10px">Prompt<textarea id="pr"></textarea></label>
-  <p><button class="pri" id="sv">Save settings</button> <span id="ok" class="lv"></span></p></div>
+ <div class="card"><h2>Agent settings</h2>
+  <div class="row">
+   <label>Voice<select id="vo"><option value="aura-2-thalia-en">Thalia (female)</option><option value="aura-2-luna-en">Luna (female)</option><option value="aura-2-asteria-en">Asteria (female)</option><option value="aura-2-orion-en">Orion (male)</option><option value="aura-2-apollo-en">Apollo (male)</option></select></label>
+   <label>AI model<select id="mo"><option value="anthropic|claude-haiku-4-5">Claude Haiku 4.5 (fast)</option><option value="anthropic|claude-sonnet-4-5">Claude Sonnet 4.5 (smarter)</option><option value="open_ai|gpt-4o-mini">GPT-4o mini</option><option value="open_ai|gpt-4o">GPT-4o</option><option value="google|gemini-2.5-flash">Gemini 2.5 Flash</option></select></label>
+   <label>Creativity (0 to 1)<input id="tp" type="number" min="0" max="1" step="0.1" style="width:110px"></label>
+   <label>Reply length<select id="ln"><option value="short">Short</option><option value="medium">Medium</option><option value="detailed">Detailed</option></select></label>
+   <label>Tone<select id="to"><option>warm and professional</option><option>friendly and casual</option><option>calm and reassuring</option><option>formal and concise</option><option>energetic and upbeat</option></select></label></div>
+  <div class="row" style="margin-top:10px">
+   <label>Agent name<input id="an"></label><label>Company name<input id="co"></label>
+   <label>Role preset<select id="rp"><option value="">Choose...</option><option value="biller">Billing support</option><option value="general">General assistant</option><option value="sales">Sales</option><option value="health">Healthcare front desk</option></select></label>
+   <label style="flex:1;min-width:260px">Role (who the agent is)<input id="ro"></label></div>
+  <label style="margin-top:10px">Greeting<input id="gr"></label>
+  <label style="margin-top:10px">Business knowledge (plans, prices, policies, FAQs)<textarea id="kn"></textarea></label>
+  <label style="margin-top:10px">Rules (what it must or must not do)<textarea id="ru"></textarea></label>
+  <label style="margin-top:10px">Extra instructions (optional)<textarea id="pr"></textarea></label>
+  <p><button class="pri" id="sv">Save settings</button> <span id="ok" class="lv"></span> <span class="mut">Applies to new conversations.</span></p></div>
 </div>
 
-<div id="drawer"><div class="row" style="justify-content:space-between"><b id="dt"></b><span><button id="de" class="bad">End</button> <button id="dc">Close</button></span></div><div id="tr"></div></div>
+<div id="drawer"><div class="row" style="justify-content:space-between"><b id="dt"></b><span><button id="de" class="bad">End</button> <button id="dc">Close</button></span></div><div id="tr"></div><div id="ctl"><textarea id="ct" style="min-height:70px" placeholder="Type what the agent should say, or an instruction for it"></textarea><div class="row" style="margin-top:8px"><button class="pri" id="csay">Make agent say this</button><button id="cins">Give instruction</button></div></div></div>
 
 <script>
-var $=function(i){return document.getElementById(i)},PW=sessionStorage.getItem('pw')||'',cur='',last=0,loaded=false,S=null,timer=null;
-function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&','<':'<','>':'>','"':'"'}[c]})}
+var $=function(i){return document.getElementById(i)},PW=sessionStorage.getItem('pw')||'',cur='',last=0,loaded=false,S=null,timer=null,arch=0,MAP={vo:'voice',gr:'greeting',mo:'model',tp:'temp',an:'agent_name',co:'company',ro:'role',to:'tone',ln:'length',kn:'knowledge',ru:'rules',pr:'prompt'},RP={biller:'a friendly billing and support assistant who helps with invoice questions and subscription requests',general:'a helpful general-purpose assistant',sales:'a friendly sales assistant who explains plans and helps people choose',health:'a calm front-desk assistant who helps with appointments and general questions'};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function call(p,b){var o={headers:{'x-admin':PW,'Content-Type':'application/json'}};if(b){o.method='POST';o.body=JSON.stringify(b)}
  return fetch('/api/admin/'+p,o).then(function(r){if(r.status===401){logout();throw 0}return r.json()})}
 function logout(){PW='';sessionStorage.removeItem('pw');clearInterval(timer);$('app').hidden=true;$('login').hidden=false}
@@ -56,7 +68,7 @@ $('pw').onkeydown=function(e){if(e.key==='Enter')$('go').click()};
 $('out').onclick=logout;
 if(PW)call('state').then(boot).catch(function(){});
 
-function poll(){call('state').then(function(d){S=d;render(d);if(cur)loadMsgs()}).catch(function(){})}
+function poll(){call('state?arch='+arch).then(function(d){S=d;render(d);if(cur)loadMsgs()}).catch(function(){})}
 function render(d){
  var on=d.settings.enabled==='1',live=d.sessions.filter(function(s){return s.live}).length;
  $('cnt').textContent=live?'● '+live+' live':'';
@@ -65,19 +77,30 @@ function render(d){
   return '<tr><td>'+esc(l.name)+(l.live?' <span class=lv>● live</span>':'')+'</td><td>'+(!l.active?'Off':ex?'Expired':'On')+'</td><td>'+l.used+(l.max_sessions?' / '+l.max_sessions:'')+'</td><td>'+(l.expires?new Date(l.expires).toLocaleString():'Never')+'</td><td>'+(l.max_sec?l.max_sec/60+' min':'None')+
   '</td><td><button data-a=copy data-id="'+l.id+'">Copy link</button> <button data-a=tog data-id="'+l.id+'" data-v="'+(l.active?0:1)+'">'+(l.active?'Turn off':'Turn on')+'</button> <button class=bad data-a=del data-id="'+l.id+'">Delete</button></td></tr>'}).join('')||'<tr><td class=mut>No links yet</td></tr>';
  $('ss').innerHTML=d.sessions.map(function(s){
-  return '<tr><td>'+esc(s.name)+'</td><td class=mut>'+new Date(s.started).toLocaleString()+'</td><td>'+(s.live?'<span class=lv>● live</span>':'<span class=mut>ended</span>')+'</td><td><button data-a=view data-id="'+s.id+'" data-n="'+esc(s.name)+'">'+(s.live?'Listen':'View')+'</button> '+(s.live?'<button class=bad data-a=kill data-id="'+s.id+'">End</button>':'')+'</td></tr>'}).join('')||'<tr><td class=mut>No conversations yet</td></tr>';
- if(!loaded){loaded=true;$('vo').value=d.settings.voice;$('gr').value=d.settings.greeting;$('pr').value=d.settings.prompt}
+  var b='<button data-a=view data-id="'+s.id+'" data-n="'+esc(s.name)+'">'+(s.live?'Listen':'View')+'</button> ';
+  b+=s.live?'<button class=bad data-a=kill data-id="'+s.id+'">End</button>':'<button data-a=arc data-id="'+s.id+'" data-v="'+(arch?0:1)+'">'+(arch?'Restore':'Archive')+'</button> <button class=bad data-a=sdel data-id="'+s.id+'">Delete</button>';
+  return '<tr><td>'+esc(s.name)+'</td><td class=mut>'+new Date(s.started).toLocaleString()+'</td><td>'+(s.live?'<span class=lv>● live</span>':'<span class=mut>ended</span>')+'</td><td>'+b+'</td></tr>'}).join('')||'<tr><td class=mut>No conversations</td></tr>';
+ var cs=d.sessions.filter(function(x){return x.id===cur})[0];$('ctl').style.display=cs&&cs.live?'block':'none';
+ if(!loaded){loaded=true;for(var k in MAP)$(k).value=d.settings[MAP[k]]}
 }
 document.addEventListener('click',function(e){var b=e.target.closest('button[data-a]');if(!b)return;var a=b.dataset.a,id=b.dataset.id;
  if(a==='copy'){var u=location.origin+'/?k='+id;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){b.textContent='Copied'}).catch(function(){prompt('Copy this link',u)})}
  if(a==='tog')call('toggle',{id:id,active:b.dataset.v==='1'}).then(poll);
  if(a==='del'&&confirm('Delete this link? Live sessions will end.'))call('delete',{id:id}).then(poll);
  if(a==='kill')call('kill',{sid:id}).then(poll);
+ if(a==='arc')call('archive',{sid:id,flag:b.dataset.v==='1'}).then(poll);
+ if(a==='sdel'&&confirm('Delete this conversation permanently?'))call('sdelete',{sid:id}).then(function(){if(cur===id)$('dc').click();poll()});
  if(a==='view')openT(id,b.dataset.n)});
 $('mk').onclick=function(){call('create',{name:$('n').value,hours:$('h').value,min:$('mm').value,max:$('ms').value}).then(function(r){$('n').value='';poll();prompt('Link created. Copy it:',location.origin+'/?k='+r.id)})};
 $('master').onclick=function(){call('settings',{enabled:S.settings.enabled==='1'?'0':'1'}).then(poll)};
 $('killall').onclick=function(){if(confirm('End all live sessions?'))call('killall',{}).then(poll)};
-$('sv').onclick=function(){call('settings',{voice:$('vo').value,greeting:$('gr').value,prompt:$('pr').value}).then(function(){$('ok').textContent='Saved';setTimeout(function(){$('ok').textContent=''},2000)})};
+$('sv').onclick=function(){var o={};for(var k in MAP)o[MAP[k]]=$(k).value;call('settings',o).then(function(){$('ok').textContent='Saved';setTimeout(function(){$('ok').textContent=''},2000)})};
+$('rp').onchange=function(){if(RP[this.value])$('ro').value=RP[this.value]};
+$('tabA').onclick=function(){arch=0;poll()};$('tabR').onclick=function(){arch=1;poll()};
+$('bulkA').onclick=function(){if(confirm('Archive all ended conversations?'))call('clear',{mode:'archive',arch:arch}).then(poll)};
+$('bulkD').onclick=function(){if(confirm('Permanently delete all ended conversations in this list?'))call('clear',{mode:'delete',arch:arch}).then(poll)};
+function sendC(t){var v=$('ct').value.trim();if(!v||!cur)return;call('cmd',{sid:cur,type:t,text:v}).then(function(){$('ct').value='';loadMsgs()})}
+$('csay').onclick=function(){sendC('say')};$('cins').onclick=function(){sendC('instruct')};
 function openT(id,n){cur=id;last=0;$('tr').innerHTML='';$('dt').textContent=n;$('drawer').style.display='flex';loadMsgs()}
 function loadMsgs(){var id=cur;call('msgs?sid='+id+'&after='+last).then(function(a){if(id!==cur)return;a.forEach(function(m){last=m.id;var d=document.createElement('div');d.className='m '+m.role;d.textContent=m.content;$('tr').appendChild(d)});if(a.length)$('tr').scrollTop=1e9})}
 $('dc').onclick=function(){cur='';$('drawer').style.display='none'};
