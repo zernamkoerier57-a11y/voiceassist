@@ -1,25 +1,105 @@
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
+import { DurableObject } from "cloudflare:workers";
 
-    if (url.pathname === "/api/token") {
-      if (request.method !== "POST") {
-        return new Response("Method not allowed", { status: 405 });
-      }
-      const res = await fetch("https://api.deepgram.com/v1/auth/grant", {
+const D = {
+  enabled: "1",
+  greeting: "Hello! How may I help you?",
+  voice: "aura-2-thalia-en",
+  prompt: "You are a friendly billing and support voice assistant. Help users understand their invoices and answer billing questions. Keep replies to one or two short sentences, spoken naturally, no markdown. If unsure, ask a short clarifying question.",
+};
+
+export class Hub extends DurableObject {
+  constructor(s, e) {
+    super(s, e);
+    this.q = (sql, ...a) => [...s.storage.sql.exec(sql, ...a)];
+    this.q("CREATE TABLE IF NOT EXISTS links(id TEXT PRIMARY KEY,name TEXT,active INT,created INT,expires INT,max_sec INT,max_sessions INT,used INT DEFAULT 0)");
+    this.q("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,link_id TEXT,started INT,last_seen INT,ended INT,killed INT)");
+    this.q("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,sid TEXT,role TEXT,content TEXT,ts INT)");
+    this.q("CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY,v TEXT)");
+  }
+  settings() { const o = { ...D }; for (const r of this.q("SELECT k,v FROM settings")) o[r.k] = r.v; return o; }
+  save(o) { for (const k of Object.keys(D)) if (k in o) this.q("INSERT OR REPLACE INTO settings VALUES(?,?)", k, String(o[k])); }
+  create(n, h, m, s) {
+    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 20), now = Date.now();
+    this.q("INSERT INTO links(id,name,active,created,expires,max_sec,max_sessions) VALUES(?,?,1,?,?,?,?)", id, String(n || "Untitled").slice(0, 80), now, h > 0 ? now + h * 3600000 : 0, m > 0 ? m * 60 : 0, s > 0 ? s : 0);
+    return id;
+  }
+  links() { return this.q("SELECT l.*,(SELECT COUNT(*) FROM sessions s WHERE s.link_id=l.id AND s.ended=0 AND s.last_seen>?) live FROM links l ORDER BY created DESC", Date.now() - 12000); }
+  toggle(id, a) { this.q("UPDATE links SET active=? WHERE id=?", a ? 1 : 0, id); }
+  remove(id) { this.q("UPDATE sessions SET killed=1,ended=? WHERE link_id=? AND ended=0", Date.now(), id); this.q("DELETE FROM links WHERE id=?", id); }
+  ok(l) { return l && l.active && (!l.expires || l.expires > Date.now()); }
+  begin(k) {
+    const st = this.settings();
+    if (st.enabled !== "1") return { r: "The agent is currently off." };
+    const l = this.q("SELECT * FROM links WHERE id=?", k)[0];
+    if (!this.ok(l)) return { r: "This link is not active." };
+    if (l.max_sessions && l.used >= l.max_sessions) return { r: "This link has reached its limit." };
+    const sid = crypto.randomUUID(), n = Date.now();
+    this.q("INSERT INTO sessions VALUES(?,?,?,?,0,0)", sid, k, n, n);
+    this.q("UPDATE links SET used=used+1 WHERE id=?", k);
+    return { sid, st };
+  }
+  ping(k, sid) {
+    const s = this.q("SELECT * FROM sessions WHERE id=?", sid)[0], l = this.q("SELECT * FROM links WHERE id=?", k)[0], n = Date.now();
+    if (!s || s.link_id !== k || s.ended || s.killed || !this.ok(l) || this.settings().enabled !== "1" || (l.max_sec && n - s.started > l.max_sec * 1000)) return false;
+    this.q("UPDATE sessions SET last_seen=? WHERE id=?", n, sid);
+    return true;
+  }
+  log(k, sid, role, c) {
+    const s = this.q("SELECT * FROM sessions WHERE id=?", sid)[0];
+    if (!s || s.link_id !== k || s.ended) return;
+    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, role === "user" ? "user" : "assistant", String(c).slice(0, 2000), Date.now());
+  }
+  end(sid) { this.q("UPDATE sessions SET ended=? WHERE id=? AND ended=0", Date.now(), sid); }
+  kill(sid) { this.q("UPDATE sessions SET killed=1,ended=? WHERE id=? AND ended=0", Date.now(), sid); }
+  killAll() { this.q("UPDATE sessions SET killed=1,ended=? WHERE ended=0", Date.now()); }
+  sessions() { return this.q("SELECT s.id,s.started,s.ended,COALESCE(l.name,'(deleted)') name,(s.ended=0 AND s.last_seen>?) live FROM sessions s LEFT JOIN links l ON l.id=s.link_id ORDER BY s.started DESC LIMIT 60", Date.now() - 12000); }
+  msgs(sid, after) { return this.q("SELECT id,role,content,ts FROM messages WHERE sid=? AND id>? ORDER BY id", sid, after); }
+}
+
+function same(a, b) {
+  if (a.length !== b.length) return false;
+  let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+export default {
+  async fetch(req, env) {
+    const u = new URL(req.url), p = u.pathname;
+    if (!p.startsWith("/api/")) return env.ASSETS.fetch(req);
+    const hub = env.HUB.get(env.HUB.idFromName("main"));
+    const j = (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    let b = {};
+    if (req.method === "POST") { try { b = await req.json(); } catch {} }
+
+    if (p === "/api/begin") {
+      const r = await hub.begin(String(b.k || ""));
+      if (!r.sid) return j({ error: r.r }, 403);
+      const g = await fetch("https://api.deepgram.com/v1/auth/grant", {
         method: "POST",
-        headers: {
-          Authorization: "Token " + env.DEEPGRAM_API_KEY,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: "Token " + env.DEEPGRAM_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ ttl_seconds: 300 }),
       });
-      return new Response(await res.text(), {
-        status: res.status,
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-      });
+      if (!g.ok) { await hub.end(r.sid); return j({ error: "Service unavailable." }, 502); }
+      const t = (await g.json()).access_token;
+      return j({ token: t, sid: r.sid, cfg: { greeting: r.st.greeting, voice: r.st.voice, prompt: r.st.prompt } });
     }
+    if (p === "/api/ping") return j({ ok: await hub.ping(String(b.k), String(b.sid)) });
+    if (p === "/api/log") { await hub.log(String(b.k), String(b.sid), b.role, b.content || ""); return j({ ok: true }); }
+    if (p === "/api/end") { await hub.end(String(b.sid)); return j({ ok: true }); }
 
-    return env.ASSETS.fetch(request);
+    if (p.startsWith("/api/admin/")) {
+      const pw = req.headers.get("x-admin") || "";
+      if (!env.ADMIN_PASSWORD || !same(pw, env.ADMIN_PASSWORD)) return j({ error: "no" }, 401);
+      const a = p.slice(11);
+      if (a === "state") return j({ links: await hub.links(), sessions: await hub.sessions(), settings: await hub.settings() });
+      if (a === "msgs") return j(await hub.msgs(u.searchParams.get("sid") || "", +u.searchParams.get("after") || 0));
+      if (a === "create") return j({ id: await hub.create(b.name, +b.hours || 0, +b.min || 0, +b.max || 0) });
+      if (a === "toggle") { await hub.toggle(b.id, b.active); return j({ ok: true }); }
+      if (a === "delete") { await hub.remove(b.id); return j({ ok: true }); }
+      if (a === "kill") { await hub.kill(b.sid); return j({ ok: true }); }
+      if (a === "killall") { await hub.killAll(); return j({ ok: true }); }
+      if (a === "settings") { await hub.save(b); return j({ ok: true }); }
+    }
+    return j({ error: "not found" }, 404);
   },
 };
