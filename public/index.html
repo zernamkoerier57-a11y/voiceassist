@@ -186,7 +186,7 @@ async function startMic(){
   micCtx=new AudioContext({sampleRate:48000});
   var code="class P extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(960);this.n=0;}"+
     "process(inputs){var c=inputs[0][0];if(c){for(var i=0;i<c.length;i++){this.b[this.n++]=c[i];"+
-    "if(this.n===960){var o=new Int16Array(960);for(var j=0;j<960;j++){var s=Math.max(-1,Math.min(1,this.b[j]));o[j]=s<0?s*32768:s*32767;}"+ 
+    "if(this.n===960){var o=new Int16Array(960);for(var j=0;j<960;j++){var s=Math.max(-1,Math.min(1,this.b[j]));o[j]=s<0?s*32768:s*32767;}}"+
     "this.port.postMessage(o.buffer,[o.buffer]);this.n=0;}}}return true;}}registerProcessor('pcm',P);";
   var url=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
   await micCtx.audioWorklet.addModule(url);
