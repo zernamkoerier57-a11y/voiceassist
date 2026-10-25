@@ -1,12 +1,23 @@
 import { DurableObject } from "cloudflare:workers";
 
+const MAIN_DEFAULT = [
+  "Follow these steps when the supervisor has not sent a live instruction.",
+  "1. Greet the caller and ask if they need help with an invoice or with cancelling a subscription.",
+  "2. Collect their email and the plan name. Never invent amounts, dates, or invoice numbers.",
+  "3. If you cannot see the account, tell the caller to please wait a moment, then call ask_admin with one short question.",
+  "4. After the admin answers, continue with the caller.",
+  "5. For a cancellation, confirm the email and say the team will finish it. Ask if there is anything else, then thank them.",
+].join("\n");
+
 const D = {
   avatar_mode: "off", avatar_gender: "female",
   enabled: "1", greeting: "Hello! How may I help you?", voice: "aura-2-thalia-en",
   model: "anthropic|claude-haiku-4-5", temp: "0.7", agent_name: "Ava", company: "VoiceAssist",
   role: "a friendly billing and support assistant who helps with invoice questions and subscription requests",
   tone: "warm and professional", length: "short", knowledge: "",
-  rules: "If asked for legal, medical or financial advice, politely say you cannot help with that.", prompt: "",
+  rules: "If asked for legal, medical or financial advice, politely say you cannot help with that.",
+  prompt: "",
+  presets: "[]",
 };
 const LEN = {
   short: "Keep replies to one or two short sentences.",
@@ -20,7 +31,8 @@ function compose(s) {
     "#Voice\nYour replies are spoken aloud. Use plain spoken language. Never use markdown, symbols or bullet lists.",
     s.knowledge && "#Knowledge\n" + s.knowledge,
     s.rules && "#Rules\n" + s.rules,
-    s.prompt && "#Extra instructions\n" + s.prompt,
+    "#Main script\n" + (String(s.prompt || "").trim() || MAIN_DEFAULT),
+    "#Supervisor\nA human admin can hear this call. If no live instruction has been added, follow the main script only. A later block that starts with LIVE INSTRUCTION is from the admin: follow it with the caller, in your own short spoken sentences. Do not read the label aloud and do not mention the admin unless the instruction says to. If the script says to ask the admin, tell the caller to please wait a moment, then call ask_admin with one short question. When the answer comes back, continue the call. Never invent account details.",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -32,6 +44,7 @@ export class Hub extends DurableObject {
     this.q("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,link_id TEXT,started INT,last_seen INT,ended INT,killed INT)");
     this.q("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,sid TEXT,role TEXT,content TEXT,ts INT)");
     this.q("CREATE TABLE IF NOT EXISTS cmds(id INTEGER PRIMARY KEY AUTOINCREMENT,sid TEXT,type TEXT,text TEXT)");
+    this.q("CREATE TABLE IF NOT EXISTS asks(id TEXT PRIMARY KEY,sid TEXT,question TEXT,ts INT,done INT DEFAULT 0)");
     try { this.q("ALTER TABLE sessions ADD COLUMN archived INT DEFAULT 0"); } catch (e) {}
     this.q("CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY,v TEXT)");
   }
@@ -70,6 +83,24 @@ export class Hub extends DurableObject {
     if (!s || s.link_id !== k || s.ended) return;
     this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, role === "user" ? "user" : role === "sys" ? "sys" : "assistant", String(c).slice(0, 2000), Date.now());
   }
+  ask(k, sid, id, question) {
+    const s = this.q("SELECT * FROM sessions WHERE id=?", sid)[0];
+    if (!s || s.link_id !== k || s.ended || !id) return false;
+    const q = String(question || "Please advise").slice(0, 500);
+    this.q("INSERT OR REPLACE INTO asks(id,sid,question,ts,done) VALUES(?,?,?,?,0)", String(id).slice(0, 80), sid, q, Date.now());
+    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, "ask", "Agent is asking you: " + q, Date.now());
+    return true;
+  }
+  answer(sid, id, text) {
+    const a = this.q("SELECT * FROM asks WHERE id=? AND sid=? AND done=0", id, sid)[0];
+    if (!a) return false;
+    const t = String(text || "").slice(0, 1000);
+    this.q("UPDATE asks SET done=1 WHERE id=?", id);
+    this.q("INSERT INTO cmds(sid,type,text) VALUES(?,?,?)", sid, "answer", JSON.stringify({ id, content: t || "No extra detail. Continue with what you know, and do not invent account data." }));
+    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, "admin", "You answered the agent: " + (t || "(no detail)"), Date.now());
+    return true;
+  }
+  openAsks() { return this.q("SELECT id,sid,question,ts FROM asks WHERE done=0 ORDER BY ts"); }
   end(sid) { this.q("UPDATE sessions SET ended=? WHERE id=? AND ended=0", Date.now(), sid); }
   kill(sid) { this.q("UPDATE sessions SET killed=1,ended=? WHERE id=? AND ended=0", Date.now(), sid); }
   killAll() { this.q("UPDATE sessions SET killed=1,ended=? WHERE ended=0", Date.now()); }
@@ -80,7 +111,7 @@ export class Hub extends DurableObject {
   cmd(sid, type, text) {
     const s = this.q("SELECT ended FROM sessions WHERE id=?", sid)[0];
     if (!s || s.ended) return false;
-    text = String(text).slice(0, 1000);
+    text = String(text).slice(0, 2000);
     this.q("INSERT INTO cmds(sid,type,text) VALUES(?,?,?)", sid, type, text);
     this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, "admin", (type === "say" ? "Admin made the agent say: " : "Admin instruction: ") + text, Date.now());
     return true;
@@ -117,13 +148,14 @@ export default {
     }
     if (p === "/api/ping") return j(await hub.ping(String(b.k), String(b.sid)));
     if (p === "/api/log") { await hub.log(String(b.k), String(b.sid), b.role, b.content || ""); return j({ ok: true }); }
+    if (p === "/api/ask") { return j({ ok: await hub.ask(String(b.k || ""), String(b.sid || ""), String(b.id || ""), b.question || "") }); }
     if (p === "/api/end") { await hub.end(String(b.sid)); return j({ ok: true }); }
 
     if (p.startsWith("/api/admin/")) {
       const pw = req.headers.get("x-admin") || "";
       if (!env.ADMIN_PASSWORD || !same(pw, env.ADMIN_PASSWORD)) return j({ error: "no" }, 401);
       const a = p.slice(11);
-      if (a === "state") return j({ links: await hub.links(), sessions: await hub.sessions(u.searchParams.get("arch") === "1"), settings: await hub.settings() });
+      if (a === "state") return j({ links: await hub.links(), sessions: await hub.sessions(u.searchParams.get("arch") === "1"), settings: await hub.settings(), asks: await hub.openAsks() });
       if (a === "msgs") return j(await hub.msgs(u.searchParams.get("sid") || "", +u.searchParams.get("after") || 0));
       if (a === "create") return j({ id: await hub.create(b.name, +b.hours || 0, +b.min || 0, +b.max || 0) });
       if (a === "toggle") { await hub.toggle(b.id, b.active); return j({ ok: true }); }
@@ -134,6 +166,7 @@ export default {
       if (a === "sdelete") { await hub.delSession(b.sid); return j({ ok: true }); }
       if (a === "clear") { await hub.clearEnded(b.mode, b.arch); return j({ ok: true }); }
       if (a === "cmd") return j({ ok: await hub.cmd(b.sid, b.type === "say" ? "say" : "instruct", b.text || "") });
+      if (a === "answer") return j({ ok: await hub.answer(String(b.sid || ""), String(b.id || ""), b.text || "") });
       if (a === "settings") { await hub.save(b); return j({ ok: true }); }
     }
     return j({ error: "not found" }, 404);
