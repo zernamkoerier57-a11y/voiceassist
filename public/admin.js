@@ -10,7 +10,6 @@ document.querySelectorAll('.tab-btn').forEach(function(b){
   b.onclick=function(){showTab(b.dataset.tab)};
 });
 
-
 function openSc(id){var el=$('sc-'+id);if(el)el.classList.add('open')}
 function closeSc(id){var el=$('sc-'+id);if(el)el.classList.remove('open')}
 function closeAllSc(){['kn','ru','pr','me'].forEach(closeSc)}
@@ -31,30 +30,14 @@ function drawPresets(){
   }
   $('plist').innerHTML=presets.map(function(p,i){
     if(editIdx===i){
-      return '<div class="pcard open" data-i="'+i+'">'+'
-        '<div class="row-line"><span class="num">#'+(i+1)+'</span><span style="flex:1"></span>'+'
-        '<div class="acts"><button type="button" data-a="done" data-i="'+i+'">Done</button>'+'
-        '<button type="button" class="bad" data-a="rmp" data-i="'+i+'">Remove</button></div></div>'+'
-        '<label>Short label (button text)<input data-pi="'+i+'" data-pf="label" value="'+esc(p.label||'')+'" placeholder="e.g. Call support team"></label>'+'
-        '<label>What the agent should do<textarea rows="4" data-pi="'+i+'" data-pf="detail" placeholder="Tell the caller to contact the support team…">'+esc(p.detail||'')+'</textarea></label>'+'
-      '</div>';
+      return '<div class="pcard open" data-i="'+i+'">'+'<div class="row-line"><span class="num">#'+(i+1)+'</span><span style="flex:1"></span>'+'<div class="acts"><button type="button" data-a="done" data-i="'+i+'">Done</button>'+'<button type="button" class="bad" data-a="rmp" data-i="'+i+'">Remove</button></div></div>'+'<label>Short label (button text)<input data-pi="'+i+'" data-pf="label" value="'+esc(p.label||'')+'" placeholder="e.g. Call support team"></label>'+'<label>What the agent should do<textarea rows="4" data-pi="'+i+'" data-pf="detail" placeholder="Tell the caller to contact the support team…">'+esc(p.detail||'')+'</textarea></label>'+'</div>';
     }
     var lab=(p.label||'').trim();
     var prev=trunc(p.detail,120);
-    return '<div class="pcard" data-i="'+i+'">'+'
-      '<div class="row-line">'+'
-        '<span class="num">#'+(i+1)+'</span>'+'
-        '<span class="title'+(lab?'':' empty-t')+'">'+(lab?esc(lab):'Untitled')+'</span>'+'
-        '<div class="acts">'+'
-          '<button type="button" data-a="edit" data-i="'+i+'">Edit</button>'+'
-          '<button type="button" class="bad" data-a="rmp" data-i="'+i+'">Remove</button>'+'
-        '</div>'+'
-      '</div>'+'
-      (prev?'<div class="preview">'+esc(prev)+'</div>':'')+'
-    '</div>';
+    return '<div class="pcard" data-i="'+i+'">'+'<div class="row-line">'+'<span class="num">#'+(i+1)+'</span>'+'<span class="title'+(lab?'':' empty-t')+'">'+(lab?esc(lab):'Untitled')+'</span>'+'<div class="acts">'+'<button type="button" data-a="edit" data-i="'+i+'">Edit</button>'+'<button type="button" class="bad" data-a="rmp" data-i="'+i+'">Remove</button>'+'</div>'+'</div>'+(prev?'<div class="preview">'+esc(prev)+'</div>':'')+'</div>';
   }).join('');
 }
-function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&','<':'<','>':'>','"':'"'}[c]})}
 function call(p,b){
   var o={headers:{'x-admin':PW,'Content-Type':'application/json'}};
   if(b){o.method='POST';o.body=JSON.stringify(b)}
@@ -75,16 +58,14 @@ function render(d){
   $('master').style.borderColor=on?'var(--g)':'var(--l)';
   $('lk').innerHTML=d.links.map(function(l){
     var ex=l.expires&&l.expires<Date.now();
-    return '<tr><td>'+esc(l.name)+(l.live?' <span class=lv>● live</span>':'')+'</td><td>'+(!l.active?'Off':ex?'Expired':'On')+'</td><td>'+l.used+(l.max_sessions?' / '+l.max_sessions:'')+'</td><td>'+(l.expires?new Date(l.expires).toLocaleString():'Never')+'</td><td>'+(l.max_sec?l.max_sec/60+' min':'None')+
-    '</td><td><button data-a=copy data-id="'+l.id+'">Copy</button> <button data-a=tog data-id="'+l.id+'" data-v="'+(l.active?0:1)+'">'+(l.active?'Off':'On')+'</button> <button class=bad data-a=del data-id="'+l.id+'">Delete</button></td></tr>'
+    return '<tr><td>'+esc(l.name)+(l.live?' <span class=lv>● live</span>':'')+'</td><td>'+(!l.active?'Off':ex?'Expired':'On')+'</td><td>'+l.used+(l.max_sessions?' / '+l.max_sessions:'')+'</td><td>'+(l.expires?new Date(l.expires).toLocaleString():'Never')+'</td><td>'+(l.max_sec?l.max_sec/60+' min':'None')+'</td><td><button data-a=copy data-id="'+l.id+'">Copy</button> <button data-a=tog data-id="'+l.id+'" data-v="'+(l.active?0:1)+'">'+(l.active?'Off':'On')+'</button> <button class=bad data-a=del data-id="'+l.id+'">Delete</button></td></tr>'
   }).join('')||'<tr><td colspan=6 class=mut>No links yet</td></tr>';
   $('ss').innerHTML=d.sessions.map(function(s){
     var b='<button data-a=view data-id="'+s.id+'" data-n="'+esc(s.name)+'">'+(s.live?'Listen':'View')+'</button> ';
     b+=s.live?'<button class=bad data-a=kill data-id="'+s.id+'">End</button>':'<button data-a=arc data-id="'+s.id+'" data-v="'+(arch?0:1)+'">'+(arch?'Restore':'Archive')+'</button> <button class=bad data-a=sdel data-id="'+s.id+'">Delete</button>';
     return '<tr><td>'+esc(s.name)+'</td><td class=mut>'+new Date(s.started).toLocaleString()+'</td><td>'+(s.live?'<span class=lv>● live</span>':'<span class=mut>ended</span>')+'</td><td>'+b+'</td></tr>'
   }).join('')||'<tr><td colspan=4 class=mut>No conversations</td></tr>';
-  $('ctl').style.display=cs&&cs.live?'flex':'none';
-  var cs=d.sessions.find(function(s){return s.id===cur});
+  var cs=d.sessions.filter(function(x){return x.id===cur})[0];
   $('ctl').style.display=cs&&cs.live?'flex':'none';
   if(cs&&cs.live){
     var bt=presets.map(function(p,i){return (p.label||'').trim()?'<button type="button" class="qbtn" data-a="pre" data-i="'+i+'">'+esc(p.label)+'</button>':''}).join('');
@@ -104,7 +85,7 @@ function render(d){
   } else {$('aq').innerHTML='';$('aq').setAttribute('data-h','');$('aq-wrap').style.display='none'}
   if(!loaded){
     loaded=true;
-    for(var k in MAP)$(k).value=d.settings[MAP[k]];
+    for(var k in MAP)$(k).value=d.settings[MAP[k]]||'';
     try{presets=JSON.parse(d.settings.presets||'[]')}catch(e){presets=[]}
     if(!Array.isArray(presets))presets=[];
     editIdx=-1;
@@ -139,7 +120,7 @@ $('mk').onclick=function(){call('create',{name:$('n').value,hours:+$('h').value,
 $('killall').onclick=function(){if(confirm('End all live sessions?'))call('killall',{}).then(poll)};
 function saveAll(extra){
   var o={};
-  for(var k in MAP)o[MAP[k]]=$(k).value;
+  for(var k in MAP)o[MAP[k]]=$(k)?$(k).value:'';
   o.presets=JSON.stringify(presets.map(function(p){return{label:String(p.label||'').slice(0,80),detail:String(p.detail||'').slice(0,2000)}}));
   if(extra)for(var x in extra)o[x]=extra[x];
   return call('settings',o);
