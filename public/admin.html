@@ -124,7 +124,7 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
 .qbtn{font-size:.8rem;padding:7px 11px;border-radius:999px}
 #ct{min-height:64px;margin:0}
 .ctl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.ctl-actions button{flex:1;min-width:120px}
+.ctl-actions button{flex:1;min-width:100px}
 .hint{font-size:.8rem;color:var(--m);margin:6px 0 0}
 .save-bar{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
 .sec-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--m);margin:18px 0 8px;font-weight:600}
@@ -295,6 +295,22 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
         </div>
       </div>
 
+      <div class="scoll" id="sc-me" data-sc="me">
+        <div class="sc-row">
+          <span class="sc-title">Learned memory</span>
+          <div class="acts"><button type="button" data-a="scedit" data-sc="me">Edit</button></div>
+        </div>
+        <div class="sc-prev" id="prev-me"></div>
+        <div class="sc-body">
+          <p class="mut" style="margin:0 0 8px;font-size:.8rem">Rules the agent learned from you on past calls. Always applied. Edit or clear anytime.</p>
+          <label>Permanent memory<textarea id="me" rows="6" placeholder="• Never offer a refund without admin approval.&#10;• Always confirm the email before cancelling."></textarea></label>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" data-a="scdone" data-sc="me">Done</button>
+            <button type="button" class="bad" id="clrMe">Clear all memory</button>
+          </div>
+        </div>
+      </div>
+
       <div class="scoll" id="sc-pr" data-sc="pr">
         <div class="sc-row">
           <span class="sc-title">Main prompt</span>
@@ -371,8 +387,10 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
       <textarea id="ct" placeholder="Type what the agent should do on this call…"></textarea>
       <div class="ctl-actions">
         <button class="pri" id="cins" type="button">Tell the agent</button>
+        <button id="crem" type="button" title="Save to permanent memory and guide now">Remember forever</button>
         <button id="csay" type="button">Say exactly</button>
       </div>
+      <p class="hint" style="margin-top:6px">Prohibitions (“don’t…”, “never…”) are auto-saved to Learned memory. Or press <b>Remember forever</b>.</p>
     </div>
   </div>
 </div>
