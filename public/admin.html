@@ -17,7 +17,7 @@ button:hover{background:#26272c}.pri{background:var(--g);color:#04170f;border-co
 #tr{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .m{padding:9px 12px;border-radius:12px;max-width:85%;border:1px solid var(--l)}.m.user{align-self:flex-end;background:#1d1e22}
 #login{max-width:320px;margin:15vh auto;display:flex;flex-direction:column;gap:10px}
-.m.admin{border-color:var(--g)}.m.sys{color:var(--r);align-self:center;border:0}#ctl{display:none}
+.m.admin{border-color:var(--g)}.m.ask{border-color:#e6b35a;max-width:100%}.m.sys{color:var(--r);align-self:center;border:0}#ctl{display:none}.qbtn{font-size:.85rem}
 </style></head><body>
 <div id="login"><h2>Admin login</h2><input id="pw" type="password" placeholder="Password"><button class="pri" id="go">Login</button><div id="err" class="bad"></div></div>
 
@@ -52,15 +52,21 @@ button:hover{background:#26272c}.pri{background:var(--g);color:#04170f;border-co
   <label style="margin-top:10px">Greeting<input id="gr"></label>
   <label style="margin-top:10px">Business knowledge (plans, prices, policies, FAQs)<textarea id="kn"></textarea></label>
   <label style="margin-top:10px">Rules (what it must or must not do)<textarea id="ru"></textarea></label>
-  <label style="margin-top:10px">Extra instructions (optional)<textarea id="pr"></textarea></label>
+  <label style="margin-top:10px">Main prompt — step by step script, used when you send no live instruction<textarea id="pr" rows="8" placeholder="1. Greet them and ask if this is an invoice or a cancellation.&#10;2. Collect email and plan name. Do not invent amounts.&#10;3. If you cannot see the account, tell them to please wait, then ask the admin with ask_admin."></textarea></label>
+  <div style="margin-top:16px"><h2>Quick instructions</h2><p class="mut">Write these ahead of time. On a live call they show as buttons. The short label is what you press. The lines under it are what the agent should base its reply on.</p><div id="plist"></div><button type="button" id="addP">Add instruction</button></div>
   <p><button class="pri" id="sv">Save settings</button> <span id="ok" class="lv"></span> <span class="mut">Applies to new conversations.</span><br><span class="mut">Real person video needs 4 files in public/avatars: female-idle.mp4, female-talk.mp4, male-idle.mp4, male-talk.mp4 (missing files fall back to the animated face).</span></p></div>
 </div>
 
-<div id="drawer"><div class="row" style="justify-content:space-between"><b id="dt"></b><span><button id="de" class="bad">End</button> <button id="dc">Close</button></span></div><div id="tr"></div><div id="ctl"><textarea id="ct" style="min-height:70px" placeholder="Type what the agent should say, or an instruction for it"></textarea><div class="row" style="margin-top:8px"><button class="pri" id="csay">Make agent say this</button><button id="cins">Give instruction</button></div></div></div>
+<div id="drawer"><div class="row" style="justify-content:space-between"><b id="dt"></b><span><button id="de" class="bad">End</button> <button id="dc">Close</button></span></div><div id="tr"></div><div id="ctl"><div id="aq"></div><div id="pbtns" class="row" style="margin-bottom:8px"></div><textarea id="ct" style="min-height:70px" placeholder="Or type a new instruction for this call"></textarea><div class="row" style="margin-top:8px"><button class="pri" id="cins">Tell the agent</button><button id="csay">Make agent say this exactly</button></div></div></div>
 
 <script>
-var $=function(i){return document.getElementById(i)},PW=sessionStorage.getItem('pw')||'',cur='',last=0,loaded=false,S=null,timer=null,arch=0,MAP={am:'avatar_mode',ag:'avatar_gender',vo:'voice',gr:'greeting',mo:'model',tp:'temp',an:'agent_name',co:'company',ro:'role',to:'tone',ln:'length',kn:'knowledge',ru:'rules',pr:'prompt'},RP={biller:'a friendly billing and support assistant who helps with invoice questions and subscription requests',general:'a helpful general-purpose assistant',sales:'a friendly sales assistant who explains plans and helps people choose',health:'a calm front-desk assistant who helps with appointments and general questions'};
-function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+var $=function(i){return document.getElementById(i)},PW=sessionStorage.getItem('pw')||'',cur='',last=0,loaded=false,S=null,timer=null,arch=0,presets=[],MAP={am:'avatar_mode',ag:'avatar_gender',vo:'voice',gr:'greeting',mo:'model',tp:'temp',an:'agent_name',co:'company',ro:'role',to:'tone',ln:'length',kn:'knowledge',ru:'rules',pr:'prompt'},RP={biller:'a friendly billing and support assistant who helps with invoice questions and subscription requests',general:'a helpful general-purpose assistant',sales:'a friendly sales assistant who explains plans and helps people choose',health:'a calm front-desk assistant who helps with appointments and general questions'};
+function drawPresets(){
+  $('plist').innerHTML=presets.map(function(p,i){
+    return '<div class="card" style="margin:8px 0;padding:10px"><label>Short label (the button)<input data-pi="'+i+'" data-pf="label" value="'+esc(p.label||'')+'"></label><label style="margin-top:8px">What the agent should do when you press it<textarea rows="3" data-pi="'+i+'" data-pf="detail">'+esc(p.detail||'')+'</textarea></label><button type="button" data-a="rmp" data-i="'+i+'">Remove</button></div>';
+  }).join('')||'<p class="mut">None yet. Example label: Tell them to call support.</p>';
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&','<':'<','>':'>','"':'"'}[c]})}
 function call(p,b){var o={headers:{'x-admin':PW,'Content-Type':'application/json'}};if(b){o.method='POST';o.body=JSON.stringify(b)}
  return fetch('/api/admin/'+p,o).then(function(r){if(r.status===401){logout();throw 0}return r.json()})}
 function logout(){PW='';sessionStorage.removeItem('pw');clearInterval(timer);$('app').hidden=true;$('login').hidden=false}
@@ -83,7 +89,17 @@ function render(d){
   b+=s.live?'<button class=bad data-a=kill data-id="'+s.id+'">End</button>':'<button data-a=arc data-id="'+s.id+'" data-v="'+(arch?0:1)+'">'+(arch?'Restore':'Archive')+'</button> <button class=bad data-a=sdel data-id="'+s.id+'">Delete</button>';
   return '<tr><td>'+esc(s.name)+'</td><td class=mut>'+new Date(s.started).toLocaleString()+'</td><td>'+(s.live?'<span class=lv>● live</span>':'<span class=mut>ended</span>')+'</td><td>'+b+'</td></tr>'}).join('')||'<tr><td class=mut>No conversations</td></tr>';
  var cs=d.sessions.filter(function(x){return x.id===cur})[0];$('ctl').style.display=cs&&cs.live?'block':'none';
- if(!loaded){loaded=true;for(var k in MAP)$(k).value=d.settings[MAP[k]]}
+ if(cs&&cs.live){
+    var bt=presets.map(function(p,i){return (p.label||'').trim()?'<button type="button" class="qbtn" data-a="pre" data-i="'+i+'">'+esc(p.label)+'</button>':''}).join('');
+    if($('pbtns').getAttribute('data-h')!==bt){$('pbtns').innerHTML=bt;$('pbtns').setAttribute('data-h',bt);}
+    var asks=(d.asks||[]).filter(function(a){return a.sid===cur;});
+    var sig=asks.map(function(a){return a.id}).join(',');
+    if($('aq').getAttribute('data-h')!==sig){
+      $('aq').innerHTML=asks.map(function(a){return '<div class="m ask" style="margin-bottom:8px"><b>Agent is waiting</b><div>'+esc(a.question)+'</div><div class="row" style="margin-top:6px"><input id="aw'+a.id+'" placeholder="Your answer" style="flex:1"><button class="pri" data-a="ans" data-id="'+a.id+'">Send answer</button></div></div>'}).join('');
+      $('aq').setAttribute('data-h',sig);
+    }
+  } else { $('aq').innerHTML=''; $('aq').setAttribute('data-h',''); }
+  if(!loaded){loaded=true;for(var k in MAP)$(k).value=d.settings[MAP[k]]; try{presets=JSON.parse(d.settings.presets||'[]')}catch(e){presets=[]} if(!Array.isArray(presets))presets=[]; drawPresets();}
 }
 document.addEventListener('click',function(e){var b=e.target.closest('button[data-a]');if(!b)return;var a=b.dataset.a,id=b.dataset.id;
  if(a==='copy'){var u=location.origin+'/?k='+id;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){b.textContent='Copied'}).catch(function(){prompt('Copy this link',u)})}
@@ -92,11 +108,16 @@ document.addEventListener('click',function(e){var b=e.target.closest('button[dat
  if(a==='kill')call('kill',{sid:id}).then(poll);
  if(a==='arc')call('archive',{sid:id,flag:b.dataset.v==='1'}).then(poll);
  if(a==='sdel'&&confirm('Delete this conversation permanently?'))call('sdelete',{sid:id}).then(function(){if(cur===id)$('dc').click();poll()});
- if(a==='view')openT(id,b.dataset.n)});
+ if(a==='view')openT(id,b.dataset.n);
+ if(a==='rmp'){presets.splice(+b.dataset.i,1);drawPresets();}
+ if(a==='pre'&&cur){var pr=presets[+b.dataset.i]; if(pr) call('cmd',{sid:cur,type:'instruct',text:pr.detail||pr.label}).then(loadMsgs);}
+ if(a==='ans'&&cur){var inp=$('aw'+id); call('answer',{sid:cur,id:id,text:inp?inp.value:''}).then(function(){poll();loadMsgs();});}});
 $('mk').onclick=function(){call('create',{name:$('n').value,hours:$('h').value,min:$('mm').value,max:$('ms').value}).then(function(r){$('n').value='';poll();prompt('Link created. Copy it:',location.origin+'/?k='+r.id)})};
 $('master').onclick=function(){call('settings',{enabled:S.settings.enabled==='1'?'0':'1'}).then(poll)};
 $('killall').onclick=function(){if(confirm('End all live sessions?'))call('killall',{}).then(poll)};
-$('sv').onclick=function(){var o={};for(var k in MAP)o[MAP[k]]=$(k).value;call('settings',o).then(function(){$('ok').textContent='Saved';setTimeout(function(){$('ok').textContent=''},2000)})};
+$('sv').onclick=function(){var o={};for(var k in MAP)o[MAP[k]]=$(k).value;o.presets=JSON.stringify(presets.map(function(p){return{label:String(p.label||'').slice(0,80),detail:String(p.detail||'').slice(0,2000)}}));call('settings',o).then(function(){$('ok').textContent='Saved';setTimeout(function(){$('ok').textContent=''},2000)})};
+$('addP').onclick=function(){presets.push({label:'',detail:''});drawPresets();};
+document.addEventListener('input',function(e){var el=e.target;if(!el.dataset||el.dataset.pf==null||el.dataset.pi==null)return;presets[+el.dataset.pi][el.dataset.pf]=el.value;});
 $('ag').onchange=function(){$('vo').value=this.value==='male'?'aura-2-orion-en':'aura-2-thalia-en'};
 $('rp').onchange=function(){if(RP[this.value])$('ro').value=RP[this.value]};
 $('tabA').onclick=function(){arch=0;poll()};$('tabR').onclick=function(){arch=1;poll()};
