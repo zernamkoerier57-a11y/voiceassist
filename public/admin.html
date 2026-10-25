@@ -34,11 +34,9 @@ table{width:100%;border-collapse:collapse;min-width:560px}
 td,th{text-align:left;padding:11px 10px;border-top:1px solid var(--l);font-size:.875rem}
 th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
 .lv{color:var(--g);font-weight:600}.mut{color:var(--m)}.ok{color:var(--g)}
-
 #login{max-width:360px;margin:18vh auto;padding:0 20px;display:flex;flex-direction:column;gap:12px}
 #login h1{font-size:1.35rem;margin:0 0 4px;font-weight:650}
 #login p{margin:0 0 8px;color:var(--m);font-size:.9rem}
-
 .top{
   position:sticky;top:0;z-index:40;height:var(--nav);display:flex;align-items:center;gap:8px;
   padding:0 16px;background:rgba(9,9,11,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--l)
@@ -53,15 +51,12 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
 .tab-btn:hover{color:var(--t);background:var(--p2)}
 .tab-btn.on{color:var(--t);background:var(--p2);box-shadow:inset 0 -2px 0 var(--g)}
 .top .actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
-
 .page{display:none;padding:20px;max-width:1100px;margin:0 auto}
 .page.on{display:block}
 .page-head{margin-bottom:18px}
 .page-head h1{font-size:1.25rem;margin:0 0 4px;font-weight:650}
 .page-head p{margin:0;color:var(--m);font-size:.9rem}
-
 @media(max-width:720px){.top .actions button#killall{display:none}}
-
 .pcard{
   background:var(--p2);border:1px solid var(--l);border-radius:12px;padding:12px 14px;margin-bottom:10px
 }
@@ -76,10 +71,7 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
 }
 .pcard .acts{display:flex;gap:6px;flex-shrink:0}
 .pcard .acts button{padding:6px 12px;font-size:.8rem}
-.empty{
-  border:1px dashed var(--l);border-radius:12px;padding:28px;text-align:center;color:var(--m)
-}
-
+.empty{border:1px dashed var(--l);border-radius:12px;padding:28px;text-align:center;color:var(--m)}
 #overlay{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:49;backdrop-filter:blur(2px)
 }
@@ -101,16 +93,12 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
   background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);padding:2px 8px;border-radius:999px
 }
 .badge-live i{width:6px;height:6px;border-radius:50%;background:var(--g);display:inline-block}
-.d-chat-wrap{
-  flex:1;min-height:0;display:flex;flex-direction:column;background:#0c0c0e
-}
+.d-chat-wrap{flex:1;min-height:0;display:flex;flex-direction:column;background:#0c0c0e}
 .d-chat-label{
   padding:8px 16px;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--m);
   font-weight:600;border-bottom:1px solid var(--l);background:var(--p2);flex-shrink:0
 }
-#tr{
-  flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:14px 16px
-}
+#tr{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:14px 16px}
 .m{
   padding:10px 13px;border-radius:14px;max-width:88%;border:1px solid var(--l);
   font-size:.875rem;line-height:1.45;word-break:break-word
@@ -140,6 +128,21 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
 .hint{font-size:.8rem;color:var(--m);margin:6px 0 0}
 .save-bar{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
 .sec-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--m);margin:18px 0 8px;font-weight:600}
+.scoll{
+  background:var(--p2);border:1px solid var(--l);border-radius:12px;padding:12px 14px;margin-bottom:10px
+}
+.scoll.open{padding:14px}
+.scoll .sc-row{display:flex;align-items:center;gap:12px}
+.scoll .sc-title{flex:1;font-weight:550;font-size:.95rem}
+.scoll .sc-prev{
+  margin:6px 0 0 0;font-size:.8rem;color:var(--m);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+}
+.scoll .sc-body{display:none;margin-top:12px}
+.scoll.open .sc-body{display:block}
+.scoll.open .sc-prev{display:none}
+.scoll .acts{display:flex;gap:6px;flex-shrink:0}
+.scoll .acts button{padding:6px 12px;font-size:.8rem}
 </style></head><body>
 
 <div id="login">
@@ -263,16 +266,49 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
       </div>
       <label style="margin-top:12px">Greeting<input id="gr"></label>
     </div>
+
     <div class="card">
-      <div class="sec-label">Knowledge & rules</div>
-      <label>Business knowledge (plans, prices, policies, FAQs)<textarea id="kn" rows="5"></textarea></label>
-      <label style="margin-top:12px">Rules (must / must not)<textarea id="ru" rows="4"></textarea></label>
+      <div class="sec-label">Scripts & knowledge</div>
+      <p class="mut" style="margin:0 0 12px;font-size:.85rem">These stay closed. Click <b>Edit</b> to change, then Save.</p>
+
+      <div class="scoll" id="sc-kn" data-sc="kn">
+        <div class="sc-row">
+          <span class="sc-title">Business knowledge</span>
+          <div class="acts"><button type="button" data-a="scedit" data-sc="kn">Edit</button></div>
+        </div>
+        <div class="sc-prev" id="prev-kn"></div>
+        <div class="sc-body">
+          <label>Plans, prices, policies, FAQs<textarea id="kn" rows="6"></textarea></label>
+          <div style="margin-top:8px"><button type="button" data-a="scdone" data-sc="kn">Done</button></div>
+        </div>
+      </div>
+
+      <div class="scoll" id="sc-ru" data-sc="ru">
+        <div class="sc-row">
+          <span class="sc-title">Rules (must / must not)</span>
+          <div class="acts"><button type="button" data-a="scedit" data-sc="ru">Edit</button></div>
+        </div>
+        <div class="sc-prev" id="prev-ru"></div>
+        <div class="sc-body">
+          <label>What the agent must or must not do<textarea id="ru" rows="5"></textarea></label>
+          <div style="margin-top:8px"><button type="button" data-a="scdone" data-sc="ru">Done</button></div>
+        </div>
+      </div>
+
+      <div class="scoll" id="sc-pr" data-sc="pr">
+        <div class="sc-row">
+          <span class="sc-title">Main prompt</span>
+          <div class="acts"><button type="button" data-a="scedit" data-sc="pr">Edit</button></div>
+        </div>
+        <div class="sc-prev" id="prev-pr"></div>
+        <div class="sc-body">
+          <p class="mut" style="margin:0 0 8px;font-size:.8rem">Step-by-step script when you send no live instruction. Use ask_admin when the agent needs you.</p>
+          <label>Main prompt<textarea id="pr" rows="10" placeholder="1. Greet them and ask if this is an invoice or a cancellation.&#10;2. Collect email and plan name. Do not invent amounts.&#10;3. If you cannot see the account, tell them to please wait, then ask the admin with ask_admin."></textarea></label>
+          <div style="margin-top:8px"><button type="button" data-a="scdone" data-sc="pr">Done</button></div>
+        </div>
+      </div>
     </div>
-    <div class="card">
-      <div class="sec-label">Main prompt</div>
-      <p class="mut" style="margin:0 0 10px;font-size:.875rem">Step-by-step script used when you send <b>no</b> live instruction. If a step needs you, tell the agent to ask with <code>ask_admin</code> and make the caller wait.</p>
-      <label>Main prompt<textarea id="pr" rows="10" placeholder="1. Greet them and ask if this is an invoice or a cancellation.&#10;2. Collect email and plan name. Do not invent amounts.&#10;3. If you cannot see the account, tell them to please wait, then ask the admin with ask_admin."></textarea></label>
-    </div>
+
     <div class="save-bar">
       <button class="pri" id="sv" type="button">Save settings</button>
       <span id="ok" class="ok"></span>
