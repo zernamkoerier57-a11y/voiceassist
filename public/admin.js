@@ -6,10 +6,20 @@ function showTab(name){
   document.querySelectorAll('.page').forEach(function(p){p.classList.toggle('on',p.id==='pg-'+name)});
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.toggle('on',b.dataset.tab===name)});
 }
-document.querySelectorAll('.tab-btn').forEach(function(b){
-  b.onclick=function(){showTab(b.dataset.tab)};
-});
+document.querySelectorAll('.tab-btn').forEach(function(b){b.onclick=function(){showTab(b.dataset.tab)}});
 
+function openSc(id){var el=$('sc-'+id);if(el)el.classList.add('open')}
+function closeSc(id){var el=$('sc-'+id);if(el)el.classList.remove('open')}
+function closeAllSc(){['kn','ru','pr'].forEach(closeSc)}
+function updateScPreviews(){
+  ['kn','ru','pr'].forEach(function(id){
+    var el=$('prev-'+id),ta=$(id);
+    if(!el||!ta)return;
+    var t=trunc(ta.value,140);
+    el.textContent=t||'(empty — click Edit to add)';
+    el.style.fontStyle=t?'normal':'italic';
+  });
+}
 function trunc(s,n){s=String(s||'').replace(/\s+/g,' ').trim();if(!s)return '';return s.length>n?s.slice(0,n)+'\u2026':s}
 function drawPresets(){
   if(!presets.length){
@@ -94,6 +104,8 @@ function render(d){
     if(!Array.isArray(presets))presets=[];
     editIdx=-1;
     drawPresets();
+    closeAllSc();
+    updateScPreviews();
   }
 }
 
@@ -109,6 +121,8 @@ document.addEventListener('click',function(e){
   if(a==='view')openT(id,b.dataset.n);
   if(a==='edit'){editIdx=+b.dataset.i;drawPresets()}
   if(a==='done'){editIdx=-1;drawPresets()}
+  if(a==='scedit'){openSc(b.dataset.sc)}
+  if(a==='scdone'){closeSc(b.dataset.sc);updateScPreviews()}
   if(a==='rmp'){
     var ix=+b.dataset.i;
     presets.splice(ix,1);
@@ -129,7 +143,7 @@ function saveAll(){
   o.presets=JSON.stringify(presets.map(function(p){return{label:String(p.label||'').slice(0,80),detail:String(p.detail||'').slice(0,2000)}}));
   return call('settings',o);
 }
-$('sv').onclick=function(){saveAll().then(function(){$('ok').textContent='Saved';setTimeout(function(){$('ok').textContent=''},2000)})};
+$('sv').onclick=function(){closeAllSc();updateScPreviews();saveAll().then(function(){$('ok').textContent='Saved';setTimeout(function(){$('ok').textContent=''},2000)})};
 $('svP').onclick=function(){
   editIdx=-1;
   drawPresets();
