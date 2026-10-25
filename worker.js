@@ -33,6 +33,7 @@ function compose(s) {
     s.rules && "#Rules\n" + s.rules,
     "#Main script\n" + (String(s.prompt || "").trim() || MAIN_DEFAULT),
     "#Supervisor\nA human admin can hear this call. If no live instruction has been added, follow the main script only. A later block that starts with LIVE INSTRUCTION is from the admin: follow it with the caller, in your own short spoken sentences. Do not read the label aloud and do not mention the admin unless the instruction says to. If the script says to ask the admin, tell the caller to please wait a moment, then call ask_admin with one short question. When the answer comes back, continue the call. Never invent account details.",
+    "#Step confirmation\nWhen you are following the main script and there is no LIVE INSTRUCTION: before each new script step (after the first greeting), tell the caller to please wait a moment, then call confirm_step with next_step set to one short sentence describing what you are about to ask or say next. Do not say that step to the caller until the admin confirms. If the admin says yes, do that step. If the admin says no, do not continue the main script; wait for a live instruction and only keep the caller informed briefly if needed. When a LIVE INSTRUCTION is active, skip confirm_step and follow the live instruction.",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -113,7 +114,7 @@ export class Hub extends DurableObject {
     if (!s || s.ended) return false;
     text = String(text).slice(0, 2000);
     this.q("INSERT INTO cmds(sid,type,text) VALUES(?,?,?)", sid, type, text);
-    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, "admin", (type === "say" ? "Admin made the agent say: " : "Admin instruction: ") + text, Date.now());
+    this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, "admin", (type === "say" ? "Admin made the agent say: " : "Admin instruction: ") + text);
     return true;
   }
   msgs(sid, after) { return this.q("SELECT id,role,content,ts FROM messages WHERE sid=? AND id>? ORDER BY id", sid, after); }
