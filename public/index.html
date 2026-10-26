@@ -1,1 +1,232 @@
-SEE_LOCAL
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoiceAssist</title>
+<style>
+:root{--bg:#0a0a0a;--panel:#0f0f10;--line:#2a2a2d;--text:#e9e9ec;--green:#1fe08f;--pink:#ff1a8c;--blue:#2b9bd8;--purple:#8a4fd6}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;padding:28px 20px}
+.logo{align-self:flex-start;font-weight:700;font-size:1.1rem;letter-spacing:-.01em}
+main{flex:1;width:100%;max-width:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px}
+.orb{position:relative;width:260px;height:260px;transition:transform .15s}
+.ring{position:absolute;border-radius:50%;-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px));mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px))}
+.r1{inset:0;background:conic-gradient(from 0deg,var(--green),#0a0a0a 30%,var(--pink) 55%,#7a2a5a 70%,var(--green));animation:spin 7s linear infinite}
+.r2{inset:28px;background:conic-gradient(from 90deg,var(--blue),var(--purple) 40%,#1c1c24 65%,var(--green) 85%,var(--blue));animation:spin 5s linear infinite reverse}
+.orb.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.btn{display:inline-flex;align-items:center;gap:10px;font:inherit;font-weight:600;font-size:1.05rem;cursor:pointer;border-radius:8px;padding:14px 26px;border:1px solid transparent}
+.btn svg{width:20px;height:20px}
+.btn:disabled{opacity:.6;cursor:wait}
+.start{background:var(--green);color:#04170f}
+.start:hover:not(:disabled){background:#3df0a3}
+.end{background:transparent;color:#fff;border-color:#fff}
+.end:hover{background:#1a1a1c}
+.hidden{display:none!important}
+.chat{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:12px;align-items:flex-start}
+.row.user{justify-content:flex-end}
+.dot{flex:none;width:36px;height:36px;border-radius:50%;border:3px solid #8b8b90;box-shadow:inset 0 0 0 3px var(--panel),inset 0 0 0 5px #6d6d72}
+.uicon{flex:none;width:24px;height:24px;margin-top:8px;color:#9a9aa0}
+.bubble{max-width:78%;padding:12px 16px;border:1px solid var(--line);border-radius:14px;font-size:1rem;line-height:1.45}
+.user .bubble{background:#1d1e22}
+.sys{align-self:center;color:#ff8a8a;font-size:.95rem}
+.img-row{display:flex;gap:12px;align-items:flex-start}.img-row.user{justify-content:flex-end}
+.img-bubble{max-width:72%;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--panel)}
+.img-bubble img{display:block;max-width:100%;max-height:280px;object-fit:contain;background:#111}
+.upload-bar{width:100%;max-width:520px;display:none;flex-direction:column;gap:8px;margin-top:8px}
+.upload-bar.on{display:flex}
+.upload-bar .hint{font-size:.8rem;color:#8b8b90;text-align:center}
+.upload-bar button{align-self:center}
+.file-hidden{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
+.avatar{width:280px;height:280px;border-radius:24px;overflow:hidden;position:relative;background:#16171c;border:1px solid var(--line)}
+.avatar svg,.avatar video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+</style>
+</head>
+<body>
+<div class="logo">VoiceAssist</div>
+<main>
+  <div class="orb" id="orb" aria-hidden="true"><div class="ring r1"></div><div class="ring r2"></div></div>
+  <div class="avatar hidden" id="avatar"></div>
+  <button class="btn start" id="start" type="button">Talk To Agent</button>
+  <button class="btn end hidden" id="end" type="button">End Conversation</button>
+  <div class="chat hidden" id="chat" aria-live="polite"></div>
+  <div class="upload-bar" id="uploadBar">
+    <div class="hint">You can send an image to the agent now</div>
+    <button class="btn start" id="sendImg" type="button" style="font-size:.9rem;padding:10px 18px">Upload or send an image</button>
+    <input class="file-hidden" id="imgFile" type="file" accept="image/*">
+  </div>
+</main>
+<script>
+var startBtn=document.getElementById('start'),endBtn=document.getElementById('end'),chat=document.getElementById('chat'),orb=document.getElementById('orb');
+var K=new URLSearchParams(location.search).get('k')||'',SID='',pingT=null,SETTINGS=null,allowImages=false;
+function api(p,b){return fetch('/api/'+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();});}
+function buildSettings(c){
+  var fx=c.voice.indexOf('flux')===0;
+  var pm=(c.model||'anthropic|claude-haiku-4-5').split('|'),tp={type:pm[0],model:pm[1]},t=parseFloat(c.temp);
+  if(!isNaN(t)) tp.temperature=Math.max(0,Math.min(1,t));
+  return {type:"Settings",audio:{input:{encoding:"linear16",sample_rate:48000},output:{encoding:"linear16",sample_rate:24000,container:"none"}},
+    agent:{speak:{provider:fx?{type:"deepgram",version:"v2",model:c.voice}:{type:"deepgram",model:c.voice}},
+      listen:{provider:{type:"deepgram",version:"v2",model:"flux-general-en"}},
+      think:{provider:tp,prompt:c.prompt,functions:[
+        {name:"ask_admin",description:"Ask the human supervisor one short question when the script says you must check with admin before answering. Call this only after telling the caller to please wait.",parameters:{type:"object",properties:{question:{type:"string",description:"One short question for the admin"}},required:["question"]}},
+        {name:"confirm_step",description:"Before each new main-script step when there is no live admin instruction, ask the supervisor to approve the next step. Call only after telling the caller to please wait.",parameters:{type:"object",properties:{next_step:{type:"string",description:"One short sentence of what you will ask or say next to the caller"}},required:["next_step"]}}
+      ]},greeting:c.greeting}};
+}
+var ws=null,micCtx=null,micStream=null,playCtx=null,nextTime=0,sources=[],keepAlive=null,active=false,nudge=null,pendingFn={};
+function addMessage(who,text){
+  var row=document.createElement('div');row.className='row'+(who==='user'?' user':'');
+  if(who==='assistant'){var d=document.createElement('span');d.className='dot';row.appendChild(d);}
+  var b=document.createElement('div');b.className='bubble';b.textContent=text;row.appendChild(b);
+  if(who==='user'){row.insertAdjacentHTML('beforeend','<svg class="uicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>');}
+  chat.appendChild(row);chat.scrollTop=chat.scrollHeight;
+}
+function addError(text){var p=document.createElement('div');p.className='sys';p.textContent=text;chat.appendChild(p);chat.scrollTop=chat.scrollHeight;}
+function addImage(who,dataUrl){
+  if(!dataUrl)return;
+  var row=document.createElement('div');row.className='img-row'+(who==='user'?' user':'');
+  var b=document.createElement('div');b.className='img-bubble';
+  var img=document.createElement('img');img.src=dataUrl;img.alt='Shared image';
+  b.appendChild(img);row.appendChild(b);chat.appendChild(row);chat.scrollTop=chat.scrollHeight;
+}
+function setUploadVisible(on){
+  allowImages=!!on;
+  var bar=document.getElementById('uploadBar');
+  if(bar)bar.classList.toggle('on',!!on);
+}
+function compressImage(file,maxW,quality){
+  return new Promise(function(resolve,reject){
+    var fr=new FileReader();
+    fr.onload=function(){
+      var im=new Image();
+      im.onload=function(){
+        var w=im.width,h=im.height,scale=Math.min(1,maxW/Math.max(w,h));
+        var c=document.createElement('canvas');c.width=Math.round(w*scale);c.height=Math.round(h*scale);
+        c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+        resolve(c.toDataURL('image/jpeg',quality));
+      };
+      im.onerror=reject;im.src=fr.result;
+    };
+    fr.onerror=reject;fr.readAsDataURL(file);
+  });
+}
+function runCmd(c){
+  if(!ws||ws.readyState!==1)return;
+  if(c.type==='enable_images'){setUploadVisible(true);return;}
+  if(c.type==='disable_images'){setUploadVisible(false);return;}
+  if(c.type==='image'){try{var o=typeof c.text==='string'?JSON.parse(c.text):c.text;if(o&&o.data)addImage('assistant',o.data);}catch(e){}return;}
+  if(c.type==='say'){ws.send(JSON.stringify({type:'InjectAgentMessage',behavior:'queue',message:c.text}));}
+  else if(c.type==='answer'){
+    var o;try{o=JSON.parse(c.text);}catch(e){return;}
+    if(!o||!pendingFn[o.id])return;
+    var nm=pendingFn[o.id].name||'ask_admin';clearTimeout(pendingFn[o.id].t);delete pendingFn[o.id];
+    ws.send(JSON.stringify({type:'FunctionCallResponse',id:o.id,name:nm,content:o.content||''}));
+  } else {
+    nudge='Follow the latest supervisor instruction now and speak to the caller. Do not read any instruction label aloud.';
+    ws.send(JSON.stringify({type:'UpdatePrompt',prompt:'\n\nLIVE INSTRUCTION from your supervisor. This is the instruction to follow now. Ignore any older LIVE INSTRUCTION if they conflict. Speak to the caller in your own short sentences based on this. Do not say the words live instruction.\n'+c.text}));
+  }
+}
+function playPcm(arrayBuf){
+  if(!playCtx)return;
+  var len=arrayBuf.byteLength-(arrayBuf.byteLength%2);if(len<2)return;
+  var i16=new Int16Array(arrayBuf.slice(0,len)),f32=new Float32Array(i16.length);
+  for(var i=0;i<i16.length;i++)f32[i]=i16[i]/32768;
+  var buf=playCtx.createBuffer(1,f32.length,24000);buf.copyToChannel(f32,0);
+  var src=playCtx.createBufferSource();src.buffer=buf;src.connect(playCtx.destination);
+  var t=Math.max(playCtx.currentTime,nextTime);src.start(t);nextTime=t+buf.duration;sources.push(src);
+  src.onended=function(){sources=sources.filter(function(s){return s!==src;});};
+}
+function stopPlayback(){sources.forEach(function(s){try{s.stop();}catch(e){}});sources=[];nextTime=0;}
+async function startMic(){
+  micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});
+  micCtx=new AudioContext({sampleRate:48000});
+  var code="class P extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(960);this.n=0;}process(inputs){var c=inputs[0][0];if(c){for(var i=0;i<c.length;i++){this.b[this.n++]=c[i];if(this.n===960){var o=new Int16Array(960);for(var j=0;j<960;j++){var s=Math.max(-1,Math.min(1,this.b[j]));o[j]=s<0?s*32768:s*32767;}this.port.postMessage(o.buffer,[o.buffer]);this.n=0;}}}return true;}}registerProcessor('pcm',P);";
+  var url=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
+  await micCtx.audioWorklet.addModule(url);
+  var node=new AudioWorkletNode(micCtx,'pcm');
+  node.port.onmessage=function(e){if(ws&&ws.readyState===1)ws.send(e.data);};
+  micCtx.createMediaStreamSource(micStream).connect(node);
+}
+function cleanup(){
+  active=false;setUploadVisible(false);clearInterval(keepAlive);clearInterval(pingT);
+  if(SID){api('end',{sid:SID});SID='';}stopPlayback();
+  if(ws){try{ws.close();}catch(e){}ws=null;}
+  if(micStream){micStream.getTracks().forEach(function(t){t.stop();});micStream=null;}
+  if(micCtx){micCtx.close().catch(function(){});micCtx=null;}
+  if(playCtx){playCtx.close().catch(function(){});playCtx=null;}orb.classList.remove('live');
+}
+function resetUI(){endBtn.classList.add('hidden');startBtn.classList.remove('hidden');startBtn.disabled=false;}
+async function start(){
+  startBtn.disabled=true;chat.innerHTML='';
+  try{
+    var d=await api('begin',{k:K});
+    if(!d.token){chat.classList.remove('hidden');addError(d.error||'Could not start.');startBtn.disabled=false;return;}
+    var token=d.token;SID=d.sid;SETTINGS=buildSettings(d.cfg);
+    playCtx=new AudioContext({sampleRate:24000});await playCtx.resume();active=true;
+    pingT=setInterval(function(){api('ping',{k:K,sid:SID}).then(function(r){
+      if(!active)return;if(!r.ok){addError('Session ended.');cleanup();resetUI();return;}
+      (r.cmds||[]).forEach(runCmd);
+      if(typeof r.allow_images==='boolean')setUploadVisible(r.allow_images);
+      (r.images||[]).forEach(function(im){if(im.data)addImage('assistant',im.data);});
+    });},1500);
+    ws=new WebSocket('wss://agent.deepgram.com/v1/agent/converse',['bearer',token]);ws.binaryType='arraybuffer';
+    ws.onmessage=async function(e){
+      if(typeof e.data!=='string'){playPcm(e.data);return;}
+      var m;try{m=JSON.parse(e.data);}catch(err){return;}
+      if(m.type==='Welcome'){ws.send(JSON.stringify(SETTINGS));}
+      else if(m.type==='PromptUpdated'&&nudge){ws.send(JSON.stringify({type:'InjectUserMessage',content:'[ADMIN] '+nudge}));nudge=null;}
+      else if(m.type==='FunctionCallRequest'){
+        (m.functions||[]).forEach(function(f){
+          var ok=f.name==='ask_admin'||f.name==='confirm_step';
+          if(!ok||f.client_side===false){ws.send(JSON.stringify({type:'FunctionCallResponse',id:f.id,name:f.name,content:'Not available.'}));return;}
+          var q='',args={};try{args=JSON.parse(f.arguments||'{}');}catch(err){}
+          if(f.name==='confirm_step')q='NEXT STEP: '+(args.next_step||'Continue the next script step');
+          else q=args.question||'Please advise';
+          api('ask',{k:K,sid:SID,id:f.id,question:q});
+          pendingFn[f.id]={name:f.name,t:setTimeout(function(){
+            if(!pendingFn[f.id]||!ws||ws.readyState!==1)return;
+            var nm=pendingFn[f.id].name;delete pendingFn[f.id];
+            var fallback=f.name==='confirm_step'?'No confirmation yet. Do not continue the main script. Tell the caller you need another moment and wait for a live instruction.':'No answer yet. Apologize briefly and continue with what you already know. Do not invent account details.';
+            ws.send(JSON.stringify({type:'FunctionCallResponse',id:f.id,name:nm,content:fallback}));
+          },45000)};
+        });
+      }
+      else if(m.type==='SettingsApplied'){
+        try{await startMic();}catch(err){addError('Microphone access is needed. Allow it and try again.');cleanup();resetUI();return;}
+        keepAlive=setInterval(function(){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'KeepAlive'}));},8000);
+      }
+      else if(m.type==='ConversationText'){if(m.content&&String(m.content).indexOf('[ADMIN]')!==0){addMessage(m.role==='user'?'user':'assistant',m.content);api('log',{k:K,sid:SID,role:m.role,content:m.content});}}
+      else if(m.type==='UserStartedSpeaking'){stopPlayback();}
+      else if(m.type==='InjectionRefused'){api('log',{k:K,sid:SID,role:'sys',content:'Message refused: the agent was speaking. Try again in a moment.'});}
+      else if(m.type==='Error'){addError('Something went wrong. Please try again.');}
+    };
+    ws.onclose=function(){if(active){addError('Connection closed.');cleanup();resetUI();}};
+    ws.onerror=function(){if(active){addError('Could not connect. Please try again.');cleanup();resetUI();}};
+    startBtn.classList.add('hidden');endBtn.classList.remove('hidden');chat.classList.remove('hidden');orb.classList.add('live');
+  }catch(err){cleanup();chat.classList.remove('hidden');addError('Could not start the agent. Please try again.');startBtn.disabled=false;}
+}
+if(!K){startBtn.classList.add('hidden');chat.classList.remove('hidden');addError('Access link required.');}
+startBtn.addEventListener('click',start);
+endBtn.addEventListener('click',function(){cleanup();resetUI();chat.classList.add('hidden');});
+(function(){
+  var btn=document.getElementById('sendImg'),inp=document.getElementById('imgFile');
+  if(!btn||!inp)return;
+  btn.onclick=function(){if(!allowImages)return;inp.click();};
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0];inp.value='';
+    if(!f||!allowImages||!SID)return;
+    btn.disabled=true;btn.textContent='Sending…';
+    compressImage(f,1280,0.72).then(function(data){
+      return api('image',{k:K,sid:SID,data:data,mime:'image/jpeg'}).then(function(r){
+        btn.disabled=false;btn.textContent='Upload or send an image';
+        if(r&&r.ok)addImage('user',data);else addError((r&&r.error)||'Could not send image.');
+      });
+    }).catch(function(){btn.disabled=false;btn.textContent='Upload or send an image';addError('Could not send image.');});
+  };
+})();
+</script>
+</body>
+</html>
