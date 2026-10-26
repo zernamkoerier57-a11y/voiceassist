@@ -180,11 +180,10 @@ export class Hub extends DurableObject {
     if (dir === "to_admin" && !s.allow_images) return { ok: false, error: "Image upload is not enabled for this call." };
     data = String(data || "");
     if (!data.startsWith("data:image/")) return { ok: false, error: "Invalid image." };
-    if (data.length > 2800000) return { ok: false, error: "Image too large (max about 2MB). Try a smaller photo." };
+    if (data.length > 5500000) return { ok: false, error: "Image too large (max about 4MB). Try a smaller photo." };
     mime = String(mime || "image/jpeg").slice(0, 40);
     const direction = dir === "to_admin" ? "to_admin" : "to_caller";
     this.q("INSERT INTO images(sid,dir,data,mime,ts,seen) VALUES(?,?,?,?,?,0)", sid, direction, data, mime, Date.now());
-    // Do NOT put base64 into cmds (too large). Caller gets images via ping.images; admin via pending_images.
     if (direction === "to_caller") {
       this.q("INSERT INTO messages(sid,role,content,ts) VALUES(?,?,?,?)", sid, "admin", "[Image sent to caller]", Date.now());
     } else {
@@ -196,6 +195,10 @@ export class Hub extends DurableObject {
     const rows = this.q("SELECT id,data,mime,ts FROM images WHERE sid=? AND dir='to_admin' AND seen=0 ORDER BY id", sid);
     if (rows.length) this.q("UPDATE images SET seen=1 WHERE sid=? AND dir='to_admin' AND seen=0", sid);
     return rows.map(r => ({ id: r.id, data: r.data, mime: r.mime || "image/jpeg", ts: r.ts }));
+  }
+  sessionImages(sid) {
+    const rows = this.q("SELECT id,dir,data,mime,ts FROM images WHERE sid=? ORDER BY id", sid);
+    return rows.map(r => ({ id: r.id, dir: r.dir, data: r.data, mime: r.mime || "image/jpeg", ts: r.ts }));
   }
   msgs(sid, after) { return this.q("SELECT id,role,content,ts FROM messages WHERE sid=? AND id>? ORDER BY id", sid, after); }
 }
@@ -254,9 +257,10 @@ export default {
       if (a === "learn") { await hub.learn(b.text || ""); return j({ ok: true, memory: (await hub.settings()).memory }); }
       if (a === "answer") return j({ ok: await hub.answer(String(b.sid || ""), String(b.id || ""), b.text || "") });
       if (a === "settings") { await hub.save(b); return j({ ok: true }); }
-      if (a === "image") return j(await hub.sendImage(String(b.sid || ""), "to_caller", b.data || "", b.mime || "image/jpeg"));
+      if (a === "image") return j(await hub.sendImage(String(b.sid || ""), "to_caller", b.data || "", b.mime || "image/jpeg")); }
       if (a === "allow_images") return j({ ok: await hub.setAllowImages(String(b.sid || ""), !!b.on) });
       if (a === "pending_images") return j({ images: await hub.pendingAdminImages(String(b.sid || u.searchParams.get("sid") || "")) });
+      if (a === "session_images") return j({ images: await hub.sessionImages(String(b.sid || u.searchParams.get("sid") || "")) });
     }
     return j({ error: "not found" }, 404);
   },
