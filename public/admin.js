@@ -94,7 +94,8 @@ document.addEventListener('click',function(e){
   if(a==='scedit')openSc(b.dataset.sc);
   if(a==='scdone'){closeSc(b.dataset.sc);updateScPreviews()}
   if(a==='pre'&&cur){var pr=presets[+b.dataset.i];if(pr)call('cmd',{sid:cur,type:'instruct',text:pr.detail||pr.label}).then(loadMsgs)}
-  if(a==='ans'&&cur){var inp=$('aw'+id);call('answer',{sid:cur,id:id,text:inp?inp.value:''}).then(function(){poll();loadMsgs()})}
+  if(a==='ans'&&cur){var inp=$('aw'+id);call('answer',{sid:cur,id:id,text:inp?inp.value:''}).then(function(){poll();loadMsgs()})
+  }
   if(a==='yes'&&cur){call('answer',{sid:cur,id:id,text:'Yes. Proceed with this step now: '+(b.dataset.step||'')}).then(function(){poll();loadMsgs()})}
   if(a==='no'&&cur){call('answer',{sid:cur,id:id,text:'No. Do not do that step. Do not continue the main script. Wait for a live instruction from the admin before saying anything more about the script.'}).then(function(){poll();loadMsgs()})}
 });
@@ -125,7 +126,7 @@ function openLightbox(src){
   if(!src)return;
   var old=document.getElementById('lightbox');if(old)old.remove();
   var lb=document.createElement('div');lb.id='lightbox';lb.className='lightbox';
-  lb.innerHTML='<button type="button" class="lb-close" aria-label="Close">&times;</button>';
+  lb.innerHTML='<button type="button" class="lb-close" aria-label="Close">&times;</button><div class="lb-hint">Tap outside or press Esc to close</div>';
   var im=document.createElement('img');im.src=src;im.alt='Full size';
   lb.appendChild(im);
   function close(){lb.remove();document.removeEventListener('keydown',onKey);}
@@ -133,6 +134,15 @@ function openLightbox(src){
   lb.onclick=function(e){if(e.target===lb||(e.target.classList&&e.target.classList.contains('lb-close')))close();};
   document.addEventListener('keydown',onKey);
   document.body.appendChild(lb);
+}
+function makeImgBlock(data, alt){
+  var wrap=document.createElement('div');wrap.className='img-wrap';
+  var img=document.createElement('img');img.src=data;img.alt=alt||'image';
+  img.onclick=function(e){e.stopPropagation();openLightbox(data);};
+  var fs=document.createElement('button');fs.type='button';fs.className='fs-btn';fs.textContent='Full screen';
+  fs.onclick=function(e){e.stopPropagation();openLightbox(data);};
+  wrap.appendChild(img);wrap.appendChild(fs);
+  return wrap;
 }
 function compressAdminImage(file){
   return new Promise(function(resolve,reject){
@@ -153,17 +163,13 @@ function showAdminImage(data,mime){
   if(!data)return;
   var box=$('imgInbox');
   if(box){
-    var d=document.createElement('div');d.style.cssText='border:1px solid var(--l);border-radius:10px;overflow:hidden;background:#0a0a0a';
-    var lab=document.createElement('div');lab.className='mut';lab.style.cssText='padding:6px 10px;font-size:.7rem';lab.textContent='From caller · click to enlarge';
-    var img=document.createElement('img');img.src=data;img.alt='Caller image';img.style.cssText='max-width:100%;display:block;max-height:240px;object-fit:contain;cursor:zoom-in';
-    img.onclick=function(){openLightbox(data);};
-    d.appendChild(lab);d.appendChild(img);box.appendChild(d);
+    var lab=document.createElement('div');lab.className='mut';lab.style.cssText='padding:6px 10px;font-size:.7rem';lab.textContent='From caller · Full screen available';
+    box.appendChild(lab);box.appendChild(makeImgBlock(data,'Caller image'));
   }
   if($('tr')){
     var m=document.createElement('div');m.className='m user';
     var who=document.createElement('div');who.className='who';who.textContent='Caller';
-    var img2=document.createElement('img');img2.src=data;img2.alt='image';img2.onclick=function(){openLightbox(data);};
-    m.appendChild(who);m.appendChild(img2);$('tr').appendChild(m);$('tr').scrollTop=1e9;
+    m.appendChild(who);m.appendChild(makeImgBlock(data,'image'));$('tr').appendChild(m);$('tr').scrollTop=1e9;
   }
 }
 if($('sendImgAdm')&&$('admImgFile')){
@@ -175,8 +181,7 @@ if($('sendImgAdm')&&$('admImgFile')){
         if(r&&r.ok){
           var m=document.createElement('div');m.className='m admin';
           var who=document.createElement('div');who.className='who';who.textContent='You';
-          var im=document.createElement('img');im.src=data;im.alt='sent';im.onclick=function(){openLightbox(data);};
-          m.appendChild(who);m.appendChild(im);
+          m.appendChild(who);m.appendChild(makeImgBlock(data,'sent'));
           if($('tr')){$('tr').appendChild(m);$('tr').scrollTop=1e9;}
         } else alert((r&&r.error)||'Failed to send image');
       });
@@ -202,8 +207,7 @@ function loadMsgs(){
       else if($('tr')){
         var m=document.createElement('div');m.className='m admin';
         var who=document.createElement('div');who.className='who';who.textContent='You';
-        var imel=document.createElement('img');imel.src=im.data;imel.alt='sent';imel.onclick=function(){openLightbox(im.data);};
-        m.appendChild(who);m.appendChild(imel);$('tr').appendChild(m);
+        m.appendChild(who);m.appendChild(makeImgBlock(im.data,'sent'));$('tr').appendChild(m);
       }
     });}).catch(function(){});
   }
