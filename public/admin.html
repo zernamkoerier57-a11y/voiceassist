@@ -144,6 +144,17 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
 .scoll.open .sc-prev{display:none}
 .scoll .acts{display:flex;gap:6px;flex-shrink:0}
 .scoll .acts button{padding:6px 12px;font-size:.8rem}
+.m img{cursor:zoom-in}
+.fs-btn{display:block;width:100%;border:0;border-top:1px solid var(--l);background:#16161a;color:#e9e9ec;font:inherit;font-size:.78rem;font-weight:600;padding:8px 12px;cursor:pointer;text-align:center;margin-top:0;border-radius:0 0 10px 10px}
+.fs-btn:hover{background:#1f1f24;color:#1fe08f}
+.img-wrap{border:1px solid var(--l);border-radius:10px;overflow:hidden;background:#0a0a0a;margin-top:6px}
+.img-wrap img{margin-top:0!important;border-radius:0!important}
+.lightbox{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.lightbox img{max-width:96vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);cursor:default}
+.lightbox .lb-close{position:absolute;top:14px;right:18px;color:#fff;font-size:1.8rem;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.25);border-radius:10px;width:44px;height:44px;cursor:pointer;line-height:1}
+.lightbox .lb-close:hover{background:rgba(255,255,255,.12)}
+.lightbox .lb-hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.65);font-size:.8rem;pointer-events:none}
+
 </style></head><body>
 
 <div id="login">
@@ -385,23 +396,22 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
     </div>
     <div class="ctl-sec">
       <h3>Guide the agent</h3>
-      <textarea id="ct" placeholder="Type what the agent should do on this call…"></textarea>
+      <textarea id="ct" placeholder="Type a live instruction…"></textarea>
       <div class="ctl-actions">
-        <button class="pri" id="cins" type="button">Tell the agent</button>
-        <button id="crem" type="button" title="Save to permanent memory and guide now">Remember forever</button>
-        <button id="csay" type="button">Say exactly</button>
+        <button type="button" class="pri" id="cins">Send instruction</button>
+        <button type="button" id="crem">Remember this</button>
+        <button type="button" id="csay">Say this aloud</button>
       </div>
-      <p class="hint" style="margin-top:6px">Prohibitions (“don’t…”, “never…”) are auto-saved to Learned memory. Or press <b>Remember forever</b>.</p>
+      <p class="hint">Send instruction updates the agent. Remember this saves it as lasting memory.</p>
     </div>
     <div class="ctl-sec">
       <h3>Images</h3>
       <div class="ctl-actions">
-        <button type="button" id="sendImgAdm">Send image to caller</button>
+        <button type="button" class="pri" id="sendImgAdm">Send image to caller</button>
         <button type="button" id="allowImg">Allow caller images</button>
-        <button type="button" id="denyImg">Disable caller images</button>
+        <button type="button" id="denyImg">Block caller images</button>
       </div>
       <input type="file" id="admImgFile" accept="image/*" style="display:none">
-      <p class="hint" style="margin-top:6px">Caller can upload only after you allow it (or after you tell the agent to let them send a photo).</p>
       <div id="imgInbox" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
     </div>
   </div>
