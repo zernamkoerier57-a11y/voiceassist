@@ -209,9 +209,9 @@ async function start(){
         try{await startMic();}catch(err){addError('Microphone access is needed. Allow it and try again.');cleanup();resetUI();return;}
         keepAlive=setInterval(function(){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'KeepAlive'}));},8000);
       }
-      else if(m.type==='ConversationText'){if(m.content&&String(m.content).indexOf('[ADMIN]')!==0){addMessage(m.role==='user'?'user':'assistant',m.content);api('log',{k:K,sid:SID,role:m.role,content:m.content);}}
+      else if(m.type==='ConversationText'){if(m.content&&String(m.content).indexOf('[ADMIN]')!==0){addMessage(m.role==='user'?'user':'assistant',m.content);api('log',{k:K,sid:SID,role:m.role,content:m.content});}}
       else if(m.type==='UserStartedSpeaking'){stopPlayback();}
-      else if(m.type==='InjectionRefused'){api('log',{k:K,sid:SID,role:'sys',content:'Message refused: the agent was speaking. Try again in a moment.');}
+      else if(m.type==='InjectionRefused'){api('log',{k:K,sid:SID,role:'sys',content:'Message refused: the agent was speaking. Try again in a moment.'});}
       else if(m.type==='Error'){addError('Something went wrong. Please try again.');}
     };
     ws.onclose=function(){if(active){addError('Connection closed.');cleanup();resetUI();}};
