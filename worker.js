@@ -180,7 +180,7 @@ export class Hub extends DurableObject {
     if (dir === "to_admin" && !s.allow_images) return { ok: false, error: "Image upload is not enabled for this call." };
     data = String(data || "");
     if (!data.startsWith("data:image/")) return { ok: false, error: "Invalid image." };
-    if (data.length > 550000) return { ok: false, error: "Image too large (max ~400KB)." };
+    if (data.length > 2800000) return { ok: false, error: "Image too large (max about 2MB). Try a smaller photo." };
     mime = String(mime || "image/jpeg").slice(0, 40);
     this.q("INSERT INTO images(sid,dir,data,mime,ts,seen) VALUES(?,?,?,?,?,0)", sid, dir === "to_admin" ? "to_admin" : "to_caller", data, mime, Date.now());
     if (dir === "to_caller") {
