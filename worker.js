@@ -88,8 +88,19 @@ export class Hub extends DurableObject {
     return true;
   }
   create(n, h, m, s) {
-    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 20), now = Date.now();
-    this.q("INSERT INTO links(id,name,active,created,expires,max_sec,max_sessions) VALUES(?,?,1,?,?,?,?)", id, String(n || "Untitled").slice(0, 80), now, h > 0 ? now + h * 3600000 : 0, m > 0 ? m * 60 : 0, s > 0 ? s : 0);
+    // Link key = what admin types as the name (URL-safe). No random id.
+    let base = String(n || "").trim().slice(0, 60);
+    base = base.replace(/[\s\/?#&=]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (!base) base = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    let id = base, n_try = 2;
+    while (this.q("SELECT id FROM links WHERE id=?", id)[0]) {
+      id = base + "-" + n_try;
+      n_try++;
+      if (n_try > 200) { id = base + "-" + crypto.randomUUID().replace(/-/g, "").slice(0, 6); break; }
+    }
+    const now = Date.now();
+    const displayName = String(n || base).trim().slice(0, 80) || base;
+    this.q("INSERT INTO links(id,name,active,created,expires,max_sec,max_sessions) VALUES(?,?,1,?,?,?,?)", id, displayName, now, h > 0 ? now + h * 3600000 : 0, m > 0 ? m * 60 : 0, s > 0 ? s : 0);
     return id;
   }
   links() { return this.q("SELECT l.*,(SELECT COUNT(*) FROM sessions s WHERE s.link_id=l.id AND s.ended=0 AND s.last_seen>?) live FROM links l ORDER BY created DESC", Date.now() - 12000); }
@@ -259,8 +270,9 @@ export default {
       if (a === "settings") { await hub.save(b); return j({ ok: true }); }
       if (a === "image") return j(await hub.sendImage(String(b.sid || ""), "to_caller", b.data || "", b.mime || "image/jpeg")); }
       if (a === "allow_images") return j({ ok: await hub.setAllowImages(String(b.sid || ""), !!b.on) });
-      if (a === "pending_images") return j({ images: await hub.pendingAdminImages(String(b.sid || u.searchParams.get("sid") || "")) });
-      if (a === "session_images") return j({ images: await hub.sessionImages(String(b.sid || u.searchParams.get("sid") || "")) });
+      if (a === "pending_images") return j({ images: await hub.pendingAdminImages(u.searchParams.get("sid") || "") });
+      if (a === "session_images") return j({ images: await hub.sessionImages(u.searchParams.get("sid") || "") });
+      return j({ error: "unknown" }, 404);
     }
     return j({ error: "not found" }, 404);
   },
