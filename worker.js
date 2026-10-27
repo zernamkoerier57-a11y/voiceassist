@@ -268,7 +268,7 @@ export default {
       if (a === "learn") { await hub.learn(b.text || ""); return j({ ok: true, memory: (await hub.settings()).memory }); }
       if (a === "answer") return j({ ok: await hub.answer(String(b.sid || ""), String(b.id || ""), b.text || "") });
       if (a === "settings") { await hub.save(b); return j({ ok: true }); }
-      if (a === "image") return j(await hub.sendImage(String(b.sid || ""), "to_caller", b.data || "", b.mime || "image/jpeg")); }
+      if (a === "image") return j(await hub.sendImage(String(b.sid || ""), "to_caller", b.data || "", b.mime || "image/jpeg"));
       if (a === "allow_images") return j({ ok: await hub.setAllowImages(String(b.sid || ""), !!b.on) });
       if (a === "pending_images") return j({ images: await hub.pendingAdminImages(u.searchParams.get("sid") || "") });
       if (a === "session_images") return j({ images: await hub.sessionImages(u.searchParams.get("sid") || "") });
