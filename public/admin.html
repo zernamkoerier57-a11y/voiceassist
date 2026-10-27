@@ -188,8 +188,9 @@ th{color:var(--m);font-weight:500;border:0;font-size:.75rem;text-transform:upper
     </div>
     <div class="card">
       <h2>Create access link</h2>
+      <p class="mut" style="margin:0 0 10px;font-size:.85rem">Whatever you type as the <b>link key</b> becomes the URL, e.g. <code>voiceassist.online/?k=rahim</code>. Spaces become hyphens. If that key already exists, a number is added.</p>
       <div class="row">
-        <label>Name<input id="n" placeholder="e.g. Rahim"></label>
+        <label>Link key (becomes the URL)<input id="n" placeholder="e.g. rahim → /?k=rahim" autocomplete="off"></label>
         <label>Expires (hours, 0 = never)<input id="h" type="number" min="0" value="24"></label>
         <label>Max minutes / session<input id="mm" type="number" min="0" value="10"></label>
         <label>Max sessions (0 = ∞)<input id="ms" type="number" min="0" value="0"></label>
